@@ -1,7 +1,15 @@
 import Link from "next/link"
 import { SignUpForm } from "@/components/auth/sign-up-form"
 
-export default function SignUpPage() {
+export const metadata = { title: "Crear cuenta" }
+
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string; email?: string }>
+}) {
+  const { next, email } = await searchParams
+
   return (
     <div className="w-full max-w-md">
       <div className="mb-8 text-center">
@@ -12,12 +20,15 @@ export default function SignUpPage() {
       </div>
 
       <div className="rounded-lg border border-border/60 bg-card p-6 shadow-signal">
-        <SignUpForm />
+        <SignUpForm next={next} initialEmail={email} />
       </div>
 
       <p className="mt-6 text-center font-sans text-sm text-muted-foreground">
         {"¿Ya tenés cuenta? "}
-        <Link href="/auth/login" className="font-semibold text-primary hover:underline">
+        <Link
+          href={next ? `/auth/login?next=${encodeURIComponent(next)}` : "/auth/login"}
+          className="font-semibold text-primary hover:underline"
+        >
           Iniciar sesión
         </Link>
       </p>

@@ -3,28 +3,30 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  BarChart3,
   LayoutDashboard,
   Package,
-  Share2,
-  ScrollText,
-  Sparkles,
-  BarChart3,
-  Settings,
-  Store,
   Plus,
+  ScrollText,
+  Settings,
+  Share2,
+  Sparkles,
+  Store,
 } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import { SignalLogo } from "@/components/brand/signal-logo"
 import { Button } from "@/components/ui/button"
+import { TenantSwitcher, type TenantOption } from "@/components/app/tenant-switcher"
 
 interface AppSidebarProps {
-  tenantSlug: string
-  tenantName: string
+  current: TenantOption
+  tenants: TenantOption[]
 }
 
-export function AppSidebar({ tenantSlug, tenantName }: AppSidebarProps) {
+export function AppSidebar({ current, tenants }: AppSidebarProps) {
   const pathname = usePathname()
-  const base = `/app/${tenantSlug}`
+  const base = `/app/${current.slug}`
 
   const items = [
     { href: `${base}/dashboard`, label: "Dashboard", icon: LayoutDashboard },
@@ -43,13 +45,8 @@ export function AppSidebar({ tenantSlug, tenantName }: AppSidebarProps) {
         <SignalLogo size="md" tagline="High-Fidelity Signal" />
       </div>
 
-      <div className="mx-4 mb-4 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2">
-        <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          Espacio activo
-        </p>
-        <p className="mt-0.5 truncate font-display text-sm font-bold tracking-tight text-sidebar-foreground">
-          {tenantName}
-        </p>
+      <div className="mx-3 mb-4">
+        <TenantSwitcher current={current} tenants={tenants} />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3" aria-label="Navegación principal">

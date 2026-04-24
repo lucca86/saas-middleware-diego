@@ -5,14 +5,19 @@ import { createClient } from "@/lib/supabase/server"
 
 export type TenantRole = "owner" | "admin" | "operator" | "viewer"
 
-export interface TenantContext {
+export interface Tenant {
   id: string
   slug: string
   name: string
-  role: TenantRole
+  business_type: string | null
   currency: string
   timezone: string
   plan: string
+}
+
+export interface TenantContext {
+  tenant: Tenant
+  role: TenantRole
 }
 
 /**
@@ -21,10 +26,6 @@ export interface TenantContext {
  *
  * Cached per-request via React cache() so RSCs inside the same layout tree
  * reuse the same DB query.
- *
- * Redirects:
- *   - unauthenticated users -> /auth/login
- *   - non-members           -> /select-tenant?denied={slug}
  */
 export const requireTenant = cache(async (slug: string): Promise<TenantContext> => {
   const supabase = await createClient()
@@ -39,7 +40,9 @@ export const requireTenant = cache(async (slug: string): Promise<TenantContext> 
 
   const { data, error } = await supabase
     .from("tenant_members")
-    .select("role, tenants!inner(id, slug, name, currency, timezone, plan)")
+    .select(
+      "role, tenants!inner(id, slug, name, business_type, currency, timezone, plan)",
+    )
     .eq("tenants.slug", slug)
     .eq("user_id", user.id)
     .maybeSingle()
@@ -48,22 +51,25 @@ export const requireTenant = cache(async (slug: string): Promise<TenantContext> 
     redirect(`/select-tenant?denied=${slug}`)
   }
 
-  // supabase-js types the joined table as array; narrow it
-  const tenant = Array.isArray(data.tenants) ? data.tenants[0] : data.tenants
+  const t = Array.isArray(data.tenants) ? data.tenants[0] : data.tenants
 
   return {
-    id: tenant.id,
-    slug: tenant.slug,
-    name: tenant.name,
+    tenant: {
+      id: t.id,
+      slug: t.slug,
+      name: t.name,
+      business_type: t.business_type,
+      currency: t.currency,
+      timezone: t.timezone,
+      plan: t.plan,
+    },
     role: data.role as TenantRole,
-    currency: tenant.currency,
-    timezone: tenant.timezone,
-    plan: tenant.plan,
   }
 })
 
 /**
- * List all tenants the current user is a member of. Used by /select-tenant.
+ * List all tenants the current user is a member of. Used by /select-tenant
+ * and the tenant switcher popover.
  */
 export const listUserTenants = cache(async () => {
   const supabase = await createClient()
@@ -87,4 +93,25 @@ export const listUserTenants = cache(async () => {
       role: m.role as TenantRole,
     }
   })
+})
+
+export const getCurrentUserProfile = cache(async () => {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, avatar_url")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  return {
+    id: user.id,
+    email: user.email ?? profile?.email ?? null,
+    full_name: profile?.full_name ?? null,
+    avatar_url: profile?.avatar_url ?? null,
+  }
 })

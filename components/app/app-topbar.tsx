@@ -1,8 +1,14 @@
-import Link from "next/link"
-import { Bell, HelpCircle, Search, User2 } from "lucide-react"
-import { SignOutButton } from "@/components/auth/sign-out-button"
+import { Bell, HelpCircle, Search } from "lucide-react"
+import { UserMenu } from "@/components/app/user-menu"
 
-export function AppTopbar() {
+interface AppTopbarProps {
+  tenantSlug: string
+  fullName: string | null
+  email: string | null
+  avatarUrl: string | null
+}
+
+export function AppTopbar({ tenantSlug, fullName, email, avatarUrl }: AppTopbarProps) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-border/60 bg-background/80 px-6 backdrop-blur">
       <div className="flex w-full max-w-xl items-center gap-3 rounded-md border border-border/60 bg-input/40 px-3 py-2">
@@ -28,15 +34,13 @@ export function AppTopbar() {
         >
           <HelpCircle className="h-4 w-4" />
         </button>
-        <Link
-          href="/select-tenant"
-          aria-label="Cambiar espacio"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        >
-          <User2 className="h-4 w-4" />
-        </Link>
         <div className="ml-2 h-6 w-px bg-border" aria-hidden="true" />
-        <SignOutButton />
+        <UserMenu
+          tenantSlug={tenantSlug}
+          fullName={fullName}
+          email={email}
+          avatarUrl={avatarUrl}
+        />
       </div>
     </header>
   )

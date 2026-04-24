@@ -3,16 +3,22 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
+
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { toast } from "sonner"
 
-export function SignUpForm() {
+interface SignUpFormProps {
+  next?: string
+  initialEmail?: string
+}
+
+export function SignUpForm({ next, initialEmail }: SignUpFormProps) {
   const router = useRouter()
   const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState(initialEmail ?? "")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -22,8 +28,9 @@ export function SignUpForm() {
 
     const supabase = createClient()
 
-    const emailRedirectTo =
+    const base =
       process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`
+    const emailRedirectTo = next ? `${base}?next=${encodeURIComponent(next)}` : base
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -73,8 +80,14 @@ export function SignUpForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
+          readOnly={Boolean(initialEmail)}
           placeholder="tu@empresa.com"
         />
+        {initialEmail && (
+          <p className="font-sans text-xs text-muted-foreground">
+            Usá este email exacto para poder aceptar la invitación.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

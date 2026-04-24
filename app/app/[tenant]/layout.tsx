@@ -1,4 +1,8 @@
-import { requireTenant } from "@/lib/tenant/context"
+import {
+  getCurrentUserProfile,
+  listUserTenants,
+  requireTenant,
+} from "@/lib/tenant/context"
 import { AppSidebar } from "@/components/app/app-sidebar"
 import { AppTopbar } from "@/components/app/app-topbar"
 
@@ -10,14 +14,31 @@ export default async function TenantLayout({
   params: Promise<{ tenant: string }>
 }) {
   const { tenant: tenantSlug } = await params
-  const tenant = await requireTenant(tenantSlug)
+  const [{ tenant, role }, tenants, profile] = await Promise.all([
+    requireTenant(tenantSlug),
+    listUserTenants(),
+    getCurrentUserProfile(),
+  ])
+
+  const current = {
+    id: tenant.id,
+    slug: tenant.slug,
+    name: tenant.name,
+    plan: tenant.plan,
+    role,
+  }
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <AppSidebar tenantSlug={tenant.slug} tenantName={tenant.name} />
+      <AppSidebar current={current} tenants={tenants} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <AppTopbar />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <AppTopbar
+          tenantSlug={tenant.slug}
+          fullName={profile?.full_name ?? null}
+          email={profile?.email ?? null}
+          avatarUrl={profile?.avatar_url ?? null}
+        />
+        <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
       </div>
     </div>
   )

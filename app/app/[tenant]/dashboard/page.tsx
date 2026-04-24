@@ -9,10 +9,10 @@ export default async function DashboardPage({
   params: Promise<{ tenant: string }>
 }) {
   const { tenant: slug } = await params
-  const tenant = await requireTenant(slug)
+  const { tenant } = await requireTenant(slug)
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-7xl">
       <div className="mb-10">
         <div className="flex items-center gap-2 font-sans text-xs uppercase tracking-[0.18em] text-primary">
           <Activity className="h-3 w-3" />
