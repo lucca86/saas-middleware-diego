@@ -1,5 +1,6 @@
 import Link from "next/link"
-import { Package } from "lucide-react"
+import Image from "next/image"
+import { ImageOff, Package } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyContent, EmptyDescription, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -48,6 +49,7 @@ export function ProductsTable({ tenantSlug, items }: Props) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-14" />
             <TableHead className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               Producto
             </TableHead>
@@ -71,6 +73,26 @@ export function ProductsTable({ tenantSlug, items }: Props) {
         <TableBody>
           {items.map((p) => (
             <TableRow key={p.id} className="cursor-pointer">
+              <TableCell>
+                <Link href={`/app/${tenantSlug}/products/${p.id}`} className="block">
+                  <div className="relative h-10 w-10 overflow-hidden rounded-md border border-border bg-muted">
+                    {p.primary_image_url ? (
+                      <Image
+                        src={p.primary_image_url}
+                        alt=""
+                        fill
+                        sizes="40px"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              </TableCell>
               <TableCell className="max-w-xs">
                 <Link href={`/app/${tenantSlug}/products/${p.id}`} className="block">
                   <div className="font-display text-sm font-bold text-foreground">{p.name}</div>

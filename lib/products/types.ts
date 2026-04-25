@@ -76,4 +76,5 @@ export interface ProductWithCounts extends Product {
   total_stock: number
   min_price: number | null
   type_name: string | null
+  primary_image_url: string | null
 }

@@ -64,7 +64,8 @@ export async function listProducts(
       id, tenant_id, type_id, sku, name, slug, description, status,
       category, tags, attributes, created_at, updated_at,
       product_types!products_type_id_fkey(name),
-      product_variants(id, price, stock)
+      product_variants(id, price, stock),
+      product_images(url, is_primary, position)
       `,
     )
     .eq("tenant_id", tenantId)
@@ -88,6 +89,11 @@ export async function listProducts(
     const variants = (p.product_variants ?? []) as Array<{ price: number; stock: number }>
     const ptype = Array.isArray(p.product_types) ? p.product_types[0] : p.product_types
     const prices = variants.map((v) => Number(v.price)).filter((n) => !Number.isNaN(n))
+    const images = (p.product_images ?? []) as Array<{ url: string; is_primary: boolean; position: number }>
+    const primary =
+      images.find((i) => i.is_primary) ??
+      [...images].sort((a, b) => a.position - b.position)[0] ??
+      null
     return {
       id: p.id,
       tenant_id: p.tenant_id,
@@ -106,6 +112,7 @@ export async function listProducts(
       total_stock: variants.reduce((acc, v) => acc + (v.stock ?? 0), 0),
       min_price: prices.length > 0 ? Math.min(...prices) : null,
       type_name: ptype?.name ?? null,
+      primary_image_url: primary?.url ?? null,
     } as ProductWithCounts
   })
 }

@@ -25,8 +25,10 @@ import {
 import { generateCombinations, variantAttributes, variantKey } from "@/lib/products/cartesian"
 import { TagsInput } from "./tags-input"
 import { VariantsMatrix, type VariantRow } from "./variants-matrix"
+import { ProductImagesUploader } from "./product-images-uploader"
 import { deleteProduct, saveProduct } from "@/app/app/[tenant]/products/actions"
 import type { Product, ProductType, ProductVariant } from "@/lib/products/types"
+import type { ProductImage } from "@/lib/products/images"
 
 interface Props {
   tenantSlug: string
@@ -34,7 +36,7 @@ interface Props {
   currency: string
   mode: "create" | "edit"
   readonly?: boolean
-  initial?: { product: Product; variants: ProductVariant[] }
+  initial?: { product: Product; variants: ProductVariant[]; images: ProductImage[] }
 }
 
 export function ProductForm({ tenantSlug, types, currency, mode, readonly, initial }: Props) {
@@ -240,6 +242,31 @@ export function ProductForm({ tenantSlug, types, currency, mode, readonly, initi
           </div>
         </div>
       </section>
+
+      {/* Images */}
+      {mode === "edit" && initial ? (
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="mb-4">
+            <h2 className="font-display text-base font-bold text-foreground">Imágenes</h2>
+            <p className="text-xs text-muted-foreground">
+              Subí fotos del producto. La primera se marca como principal y aparece en el catálogo.
+            </p>
+          </div>
+          <ProductImagesUploader
+            tenantSlug={tenantSlug}
+            productId={initial.product.id}
+            initial={initial.images}
+            readonly={readonly}
+          />
+        </section>
+      ) : (
+        <section className="rounded-lg border border-dashed border-border bg-muted/30 p-5">
+          <h2 className="font-display text-base font-bold text-foreground">Imágenes</h2>
+          <p className="text-xs text-muted-foreground">
+            Guardá el producto para poder subir imágenes.
+          </p>
+        </section>
+      )}
 
       {/* Variants */}
       <section className="rounded-lg border border-border bg-card p-5">
