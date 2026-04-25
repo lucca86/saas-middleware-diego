@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   BarChart3,
   LayoutDashboard,
+  Layers,
   Package,
   Plus,
   ScrollText,
@@ -31,6 +32,7 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
   const items = [
     { href: `${base}/dashboard`, label: "Dashboard", icon: LayoutDashboard },
     { href: `${base}/products`, label: "Productos", icon: Package },
+    { href: `${base}/product-types`, label: "Tipos", icon: Layers },
     { href: `${base}/storefront`, label: "Storefront", icon: Store },
     { href: `${base}/channels`, label: "Canales", icon: Share2 },
     { href: `${base}/sync`, label: "Sync Logs", icon: ScrollText },
