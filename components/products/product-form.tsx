@@ -545,7 +545,7 @@ export function ProductForm({
 
       {/* Footer */}
       {!readonly ? (
-        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/80 p-3 backdrop-blur">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 p-3">
           {mode === "edit" ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
