@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ListChecks, Pencil, Plus, Trash2 } from "lucide-react"
+import { ListChecks, Pencil, Plus, Sparkles, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { SizeCurveEditor } from "./size-curve-editor"
-import { deleteSizeCurve } from "@/app/app/[tenant]/size-curves/actions"
+import { deleteSizeCurve, seedDefaultLists } from "@/app/app/[tenant]/size-curves/actions"
 import { OPTION_LIST_KIND_LABELS, type OptionListKind, type SizeCurve } from "@/lib/products/types"
 
 interface Props {
@@ -51,30 +51,67 @@ export function SizeCurvesManager({ tenantSlug, curves, canEdit }: Props) {
     return map
   }, [curves])
 
+  const [seeding, setSeeding] = useState(false)
+
   async function onDelete(id: string) {
     const res = await deleteSizeCurve(tenantSlug, id)
     if (!res.ok) toast.error(res.error ?? "No se pudo eliminar")
     else toast.success("Lista eliminada")
   }
 
+  async function onSeed() {
+    setSeeding(true)
+    try {
+      const res = await seedDefaultLists(tenantSlug)
+      if (!res.ok) {
+        toast.error(res.error ?? "No se pudieron cargar las listas sugeridas")
+        return
+      }
+      const inserted = res.inserted ?? 0
+      const skipped = res.skipped ?? 0
+      if (inserted === 0) {
+        toast.info("Ya tenés todas las listas sugeridas cargadas")
+      } else {
+        toast.success(
+          `${inserted} lista${inserted === 1 ? "" : "s"} agregada${inserted === 1 ? "" : "s"}` +
+            (skipped > 0 ? ` (${skipped} ya existían)` : ""),
+        )
+      }
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   return (
     <>
-      <div className="mb-4 flex items-center justify-end">
+      <div className="mb-4 flex items-center justify-end gap-2">
         {canEdit ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className="shadow-signal">
-                <Plus className="mr-1.5 h-4 w-4" />
-                Nueva lista
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setCreatingKind("size")}>Talles</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCreatingKind("color")}>Colores</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCreatingKind("material")}>Materiales</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCreatingKind("other")}>Otra</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onSeed}
+              disabled={seeding}
+            >
+              <Sparkles className="mr-1.5 h-4 w-4" />
+              {seeding ? "Cargando…" : "Cargar listas sugeridas"}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="shadow-signal">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Nueva lista
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setCreatingKind("size")}>Talles</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCreatingKind("color")}>Colores</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCreatingKind("material")}>Materiales</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCreatingKind("other")}>Otra</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
         ) : null}
       </div>
 
@@ -87,6 +124,18 @@ export function SizeCurvesManager({ tenantSlug, curves, canEdit }: Props) {
           <EmptyDescription>
             Creá listas reutilizables de talles, colores o materiales y enchufalas a tus tipos de producto.
           </EmptyDescription>
+          {canEdit ? (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <Button onClick={onSeed} disabled={seeding}>
+                <Sparkles className="mr-1.5 h-4 w-4" />
+                {seeding ? "Cargando…" : "Cargar listas sugeridas"}
+              </Button>
+              <Button variant="outline" onClick={() => setCreatingKind("size")}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Crear desde cero
+              </Button>
+            </div>
+          ) : null}
         </Empty>
       ) : (
         <div className="flex flex-col gap-8">
