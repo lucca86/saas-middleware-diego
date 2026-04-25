@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Plus, Settings2 } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
-import { listProducts, listProductTypes, productCounts } from "@/lib/products/queries"
+import { listCategories, listProducts, listProductTypes, productCounts } from "@/lib/products/queries"
 import { Button } from "@/components/ui/button"
 import { ProductsTable } from "@/components/products/products-table"
 import { ProductsFilters } from "@/components/products/products-filters"
@@ -12,7 +12,7 @@ export const metadata = {
 
 interface PageProps {
   params: Promise<{ tenant: string }>
-  searchParams: Promise<{ q?: string; status?: string; type?: string }>
+  searchParams: Promise<{ q?: string; status?: string; type?: string; category?: string }>
 }
 
 export default async function ProductsPage({ params, searchParams }: PageProps) {
@@ -20,13 +20,15 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
   const sp = await searchParams
   const { tenant, role } = await requireTenant(slug)
 
-  const [items, types, counts] = await Promise.all([
+  const [items, types, categories, counts] = await Promise.all([
     listProducts(tenant.id, {
       search: sp.q,
       status: (sp.status as never) ?? "all",
       typeId: sp.type,
+      categoryId: sp.category,
     }),
     listProductTypes(tenant.id),
+    listCategories(tenant.id),
     productCounts(tenant.id),
   ])
 
@@ -65,10 +67,12 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
 
       <ProductsFilters
         types={types.map((t) => ({ id: t.id, name: t.name }))}
+        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
         defaultValues={{
           q: sp.q ?? "",
           status: (sp.status as never) ?? "all",
           typeId: sp.type ?? "all",
+          categoryId: sp.category ?? "all",
         }}
       />
 

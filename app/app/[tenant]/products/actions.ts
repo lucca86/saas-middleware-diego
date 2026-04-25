@@ -23,12 +23,12 @@ const variantInputSchema = z.object({
 const productInputSchema = z.object({
   id: z.string().uuid().optional(),
   type_id: z.string().uuid().nullable(),
+  category_id: z.string().uuid().nullable().optional(),
   name: z.string().min(2).max(120),
   slug: z.string().max(120).optional().nullable(),
   sku: z.string().max(60).optional().nullable(),
   description: z.string().max(4000).optional().nullable(),
   status: z.enum(["draft", "active", "archived"]).default("draft"),
-  category: z.string().max(60).optional().nullable(),
   tags: z.array(z.string().max(40)).max(20).default([]),
   attributes: z.record(z.string(), z.unknown()).default({}),
   variants: z.array(variantInputSchema).max(500),
@@ -63,12 +63,12 @@ export async function saveProduct(
       .insert({
         tenant_id: tenant.id,
         type_id: data.type_id,
+        category_id: data.category_id ?? null,
         name: data.name,
         slug,
         sku: data.sku || null,
         description: data.description || null,
         status: data.status,
-        category: data.category || null,
         tags: data.tags,
         attributes: data.attributes,
         created_by: user.id,
@@ -87,12 +87,12 @@ export async function saveProduct(
       .from("products")
       .update({
         type_id: data.type_id,
+        category_id: data.category_id ?? null,
         name: data.name,
         slug,
         sku: data.sku || null,
         description: data.description || null,
         status: data.status,
-        category: data.category || null,
         tags: data.tags,
         attributes: data.attributes,
       })

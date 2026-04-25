@@ -57,6 +57,9 @@ export function ProductsTable({ tenantSlug, items }: Props) {
               Tipo
             </TableHead>
             <TableHead className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              Categoría
+            </TableHead>
+            <TableHead className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               Variantes
             </TableHead>
             <TableHead className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -100,6 +103,7 @@ export function ProductsTable({ tenantSlug, items }: Props) {
                 </Link>
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">{p.type_name ?? "—"}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{p.category_name ?? p.category ?? "—"}</TableCell>
               <TableCell className="font-mono text-sm">{p.variant_count}</TableCell>
               <TableCell className="font-mono text-sm">{p.total_stock}</TableCell>
               <TableCell className="font-mono text-sm">

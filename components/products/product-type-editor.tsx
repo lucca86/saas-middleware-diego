@@ -18,14 +18,16 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Spinner } from "@/components/ui/spinner"
+import { Badge } from "@/components/ui/badge"
 import { upsertProductType } from "@/app/app/[tenant]/product-types/actions"
-import type { AttributeDef, ProductType } from "@/lib/products/types"
+import type { AttributeDef, ProductType, SizeCurve } from "@/lib/products/types"
 import { slugify } from "@/lib/products/slug"
 
 interface Props {
   tenantSlug: string
   open: boolean
   editing: ProductType | null
+  curves: SizeCurve[]
   onOpenChange: (open: boolean) => void
 }
 
@@ -34,11 +36,12 @@ const EMPTY_ATTR: AttributeDef = {
   label: "",
   type: "select",
   options: [],
+  source_curve_id: null,
   is_variant: true,
   required: false,
 }
 
-export function ProductTypeEditor({ tenantSlug, open, editing, onOpenChange }: Props) {
+export function ProductTypeEditor({ tenantSlug, open, editing, curves, onOpenChange }: Props) {
   const [name, setName] = useState("")
   const [icon, setIcon] = useState("package")
   const [description, setDescription] = useState("")
@@ -85,7 +88,11 @@ export function ProductTypeEditor({ tenantSlug, open, editing, onOpenChange }: P
         attributes: attributes.map((a) => ({
           ...a,
           key: slugify(a.key || a.label).replace(/-/g, "_"),
-          options: a.type === "select" ? (a.options ?? []).filter((o) => o.trim().length > 0) : undefined,
+          options:
+            a.type === "select" && !a.source_curve_id
+              ? (a.options ?? []).filter((o) => o.trim().length > 0)
+              : undefined,
+          source_curve_id: a.type === "select" ? a.source_curve_id ?? null : null,
         })),
       })
       if (!res.ok) {
@@ -146,7 +153,8 @@ export function ProductTypeEditor({ tenantSlug, open, editing, onOpenChange }: P
               <div>
                 <h3 className="font-display text-sm font-bold text-foreground">Atributos</h3>
                 <p className="text-xs text-muted-foreground">
-                  Los de tipo <span className="font-mono">select</span> con opciones pueden generar variantes.
+                  Los de tipo <span className="font-mono">select</span> con opciones (manuales o desde una curva)
+                  pueden generar variantes.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={addAttribute}>
@@ -162,100 +170,155 @@ export function ProductTypeEditor({ tenantSlug, open, editing, onOpenChange }: P
                 </p>
               ) : null}
 
-              {attributes.map((a, idx) => (
-                <div key={idx} className="rounded-md border border-border bg-background p-3">
-                  <div className="flex items-start gap-2">
-                    <GripVertical className="mt-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-12">
-                      <div className="sm:col-span-4">
-                        <Label className="mb-1 text-xs">Etiqueta</Label>
-                        <Input
-                          value={a.label}
-                          onChange={(e) => updateAttr(idx, { label: e.target.value })}
-                          placeholder="Talle"
-                        />
-                      </div>
-                      <div className="sm:col-span-3">
-                        <Label className="mb-1 text-xs">Tipo</Label>
-                        <Select
-                          value={a.type}
-                          onValueChange={(v: AttributeDef["type"]) =>
-                            updateAttr(idx, {
-                              type: v,
-                              is_variant: v === "select" ? a.is_variant : false,
-                              options: v === "select" ? (a.options ?? []) : undefined,
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="select">Lista</SelectItem>
-                            <SelectItem value="text">Texto</SelectItem>
-                            <SelectItem value="number">Número</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="sm:col-span-5">
+              {attributes.map((a, idx) => {
+                const usingCurve = a.type === "select" && (a.source_curve_id ?? null) !== null
+                const linkedCurve = usingCurve ? curves.find((c) => c.id === a.source_curve_id) ?? null : null
+                return (
+                  <div key={idx} className="rounded-md border border-border bg-background p-3">
+                    <div className="flex items-start gap-2">
+                      <GripVertical className="mt-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-12">
+                        <div className="sm:col-span-4">
+                          <Label className="mb-1 text-xs">Etiqueta</Label>
+                          <Input
+                            value={a.label}
+                            onChange={(e) => updateAttr(idx, { label: e.target.value })}
+                            placeholder="Talle"
+                          />
+                        </div>
+                        <div className="sm:col-span-3">
+                          <Label className="mb-1 text-xs">Tipo</Label>
+                          <Select
+                            value={a.type}
+                            onValueChange={(v: AttributeDef["type"]) =>
+                              updateAttr(idx, {
+                                type: v,
+                                is_variant: v === "select" ? a.is_variant : false,
+                                options: v === "select" ? a.options ?? [] : undefined,
+                                source_curve_id: v === "select" ? a.source_curve_id ?? null : null,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="select">Lista</SelectItem>
+                              <SelectItem value="text">Texto</SelectItem>
+                              <SelectItem value="number">Número</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="sm:col-span-5">
+                          {a.type === "select" ? (
+                            <>
+                              <Label className="mb-1 text-xs">Curva de talles (opcional)</Label>
+                              <Select
+                                value={a.source_curve_id ?? "none"}
+                                onValueChange={(v) =>
+                                  updateAttr(idx, {
+                                    source_curve_id: v === "none" ? null : v,
+                                    options: v === "none" ? a.options ?? [] : [],
+                                  })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Sin curva (opciones manuales)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Sin curva (manual)</SelectItem>
+                                  {curves.map((c) => (
+                                    <SelectItem key={c.id} value={c.id}>
+                                      {c.name}{" "}
+                                      <span className="text-muted-foreground">({c.values.length})</span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </>
+                          ) : (
+                            <>
+                              <Label className="mb-1 text-xs">Ayuda (opcional)</Label>
+                              <Input
+                                value={a.help ?? ""}
+                                onChange={(e) => updateAttr(idx, { help: e.target.value })}
+                                placeholder="Texto de ayuda"
+                              />
+                            </>
+                          )}
+                        </div>
+
                         {a.type === "select" ? (
-                          <>
-                            <Label className="mb-1 text-xs">Opciones (separadas por coma)</Label>
-                            <Input
-                              value={(a.options ?? []).join(", ")}
-                              onChange={(e) =>
-                                updateAttr(idx, {
-                                  options: e.target.value
-                                    .split(",")
-                                    .map((o) => o.trim())
-                                    .filter(Boolean),
-                                })
-                              }
-                              placeholder="S, M, L, XL"
+                          <div className="sm:col-span-12">
+                            {usingCurve ? (
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs">Valores desde la curva</Label>
+                                <div className="flex flex-wrap gap-1.5 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
+                                  {linkedCurve && linkedCurve.values.length > 0 ? (
+                                    linkedCurve.values.map((v) => (
+                                      <Badge key={v} variant="outline" className="font-mono">
+                                        {v}
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">
+                                      La curva no tiene valores.
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <Label className="mb-1 text-xs">Opciones (separadas por coma)</Label>
+                                <Input
+                                  value={(a.options ?? []).join(", ")}
+                                  onChange={(e) =>
+                                    updateAttr(idx, {
+                                      options: e.target.value
+                                        .split(",")
+                                        .map((o) => o.trim())
+                                        .filter(Boolean),
+                                    })
+                                  }
+                                  placeholder="S, M, L, XL"
+                                />
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+
+                        <div className="flex items-center gap-4 sm:col-span-12">
+                          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Switch
+                              checked={a.is_variant}
+                              disabled={a.type !== "select"}
+                              onCheckedChange={(v) => updateAttr(idx, { is_variant: v })}
                             />
-                          </>
-                        ) : (
-                          <>
-                            <Label className="mb-1 text-xs">Ayuda (opcional)</Label>
-                            <Input
-                              value={a.help ?? ""}
-                              onChange={(e) => updateAttr(idx, { help: e.target.value })}
-                              placeholder="Texto de ayuda"
+                            Genera variantes
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Switch
+                              checked={a.required ?? false}
+                              onCheckedChange={(v) => updateAttr(idx, { required: v })}
                             />
-                          </>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 sm:col-span-12">
-                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Switch
-                            checked={a.is_variant}
-                            disabled={a.type !== "select"}
-                            onCheckedChange={(v) => updateAttr(idx, { is_variant: v })}
-                          />
-                          Genera variantes
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Switch
-                            checked={a.required ?? false}
-                            onCheckedChange={(v) => updateAttr(idx, { required: v })}
-                          />
-                          Requerido
-                        </label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="ml-auto text-destructive hover:text-destructive"
-                          onClick={() => removeAttr(idx)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span className="sr-only">Quitar atributo</span>
-                        </Button>
+                            Requerido
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="ml-auto text-destructive hover:text-destructive"
+                            onClick={() => removeAttr(idx)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span className="sr-only">Quitar atributo</span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

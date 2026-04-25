@@ -8,16 +8,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 interface Props {
   types: Array<{ id: string; name: string }>
-  defaultValues: { q: string; status: "all" | "draft" | "active" | "archived"; typeId: string }
+  categories: Array<{ id: string; name: string }>
+  defaultValues: {
+    q: string
+    status: "all" | "draft" | "active" | "archived"
+    typeId: string
+    categoryId: string
+  }
 }
 
-export function ProductsFilters({ types, defaultValues }: Props) {
+export function ProductsFilters({ types, categories, defaultValues }: Props) {
   const router = useRouter()
   const params = useSearchParams()
   const [, startTransition] = useTransition()
   const [q, setQ] = useState(defaultValues.q)
   const [status, setStatus] = useState(defaultValues.status)
   const [typeId, setTypeId] = useState(defaultValues.typeId)
+  const [categoryId, setCategoryId] = useState(defaultValues.categoryId)
 
   // Debounced search update
   useEffect(() => {
@@ -89,6 +96,26 @@ export function ProductsFilters({ types, defaultValues }: Props) {
           {types.map((t) => (
             <SelectItem key={t.id} value={t.id}>
               {t.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={categoryId}
+        onValueChange={(v) => {
+          setCategoryId(v)
+          update("category", v)
+        }}
+      >
+        <SelectTrigger className="w-[200px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas las categorías</SelectItem>
+          {categories.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
             </SelectItem>
           ))}
         </SelectContent>

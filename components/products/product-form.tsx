@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Save, Trash2 } from "lucide-react"
+import { ArrowLeft, ExternalLink, Save, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,37 +22,100 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { generateCombinations, variantAttributes, variantKey } from "@/lib/products/cartesian"
+import {
+  effectiveOptions,
+  generateCombinations,
+  variantAttributes,
+  variantKey,
+} from "@/lib/products/cartesian"
 import { TagsInput } from "./tags-input"
 import { VariantsMatrix, type VariantRow } from "./variants-matrix"
 import { ProductImagesUploader } from "./product-images-uploader"
 import { deleteProduct, saveProduct } from "@/app/app/[tenant]/products/actions"
-import type { Product, ProductType, ProductVariant } from "@/lib/products/types"
+import type {
+  AttributeSelection,
+  Category,
+  Product,
+  ProductType,
+  ProductVariant,
+  SizeCurve,
+} from "@/lib/products/types"
 import type { ProductImage } from "@/lib/products/images"
 
 interface Props {
   tenantSlug: string
   types: ProductType[]
+  categories: Category[]
+  curves: SizeCurve[]
   currency: string
   mode: "create" | "edit"
   readonly?: boolean
   initial?: { product: Product; variants: ProductVariant[]; images: ProductImage[] }
 }
 
-export function ProductForm({ tenantSlug, types, currency, mode, readonly, initial }: Props) {
+type SelectionsState = Record<string, AttributeSelection>
+
+export function ProductForm({
+  tenantSlug,
+  types,
+  categories,
+  curves,
+  currency,
+  mode,
+  readonly,
+  initial,
+}: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   const [typeId, setTypeId] = useState<string | null>(initial?.product.type_id ?? types[0]?.id ?? null)
+  const [categoryId, setCategoryId] = useState<string | null>(initial?.product.category_id ?? null)
   const [name, setName] = useState(initial?.product.name ?? "")
   const [sku, setSku] = useState(initial?.product.sku ?? "")
   const [description, setDescription] = useState(initial?.product.description ?? "")
   const [status, setStatus] = useState<Product["status"]>(initial?.product.status ?? "draft")
-  const [category, setCategory] = useState(initial?.product.category ?? "")
   const [tags, setTags] = useState<string[]>(initial?.product.tags ?? [])
 
   const selectedType = types.find((t) => t.id === typeId) ?? null
   const variantAttrs = useMemo(() => variantAttributes(selectedType?.attributes ?? []), [selectedType])
+
+  // ----- Selections per variant attribute -----
+  // Priority for initial values:
+  //   1. product.attributes.selections (new shape)
+  //   2. derived from existing variants (legacy products edited after upgrade)
+  //   3. all available options for the attribute
+  const [selections, setSelections] = useState<SelectionsState>(() => {
+    const stored = initial?.product.attributes?.selections ?? {}
+    const existingVariants = initial?.variants ?? []
+    const next: SelectionsState = {}
+    for (const attr of variantAttrs) {
+      const fromStore = stored[attr.key]
+      const curveId = fromStore?.curve_id ?? attr.source_curve_id ?? null
+      const all = effectiveOptions(attr, curves, curveId)
+
+      let values: string[]
+      if (fromStore?.values && fromStore.values.length > 0) {
+        values = fromStore.values
+      } else if (existingVariants.length > 0) {
+        // Derive from variants: keep only values that actually appear, preserving
+        // the order defined by the source options.
+        const used = new Set(
+          existingVariants
+            .map((v) => v.attributes?.[attr.key])
+            .filter((x): x is string => typeof x === "string" && x.length > 0),
+        )
+        values = all.filter((opt) => used.has(opt))
+        // If derivation produced nothing (e.g. variants use values not in current
+        // options), fall back to whatever the variants had.
+        if (values.length === 0) values = Array.from(used)
+        if (values.length === 0) values = all
+      } else {
+        values = all
+      }
+      next[attr.key] = { curve_id: curveId, values }
+    }
+    return next
+  })
 
   // ----- Variants state -----
   const [variants, setVariants] = useState<VariantRow[]>(() => {
@@ -68,7 +131,10 @@ export function ProductForm({ tenantSlug, types, currency, mode, readonly, initi
           status: v.status,
         }))
     }
-    return generateCombinations(selectedType?.attributes ?? []).map((attrs) => ({
+    return generateCombinations(
+      variantAttrs,
+      Object.fromEntries(variantAttrs.map((a) => [a.key, { values: effectiveOptions(a, curves, a.source_curve_id ?? null) }])),
+    ).map((attrs) => ({
       attributes: attrs,
       sku: "",
       price: "0",
@@ -78,42 +144,97 @@ export function ProductForm({ tenantSlug, types, currency, mode, readonly, initi
     }))
   })
 
-  function regenerateVariants(nextTypeId: string | null) {
+  // Recompute variants whenever selections change (preserving existing rows by key).
+  useEffect(() => {
+    const combos = generateCombinations(variantAttrs, selections)
+    setVariants((prev) => {
+      const existingByKey = new Map(prev.map((v) => [variantKey(v.attributes), v]))
+      return combos.map((attrs) => {
+        const existing = existingByKey.get(variantKey(attrs))
+        if (existing) return { ...existing, attributes: attrs }
+        return {
+          attributes: attrs,
+          sku: "",
+          price: "0",
+          stock: "0",
+          status: "active",
+          isNew: true,
+        }
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(selections), variantAttrs.map((a) => a.key).join("·")])
+
+  function changeType(nextTypeId: string | null) {
     setTypeId(nextTypeId)
     const nextType = types.find((t) => t.id === nextTypeId) ?? null
-    const combos = generateCombinations(nextType?.attributes ?? [])
-    const existingByKey = new Map(variants.map((v) => [variantKey(v.attributes), v]))
-
-    const next: VariantRow[] = combos.map((attrs) => {
-      const existing = existingByKey.get(variantKey(attrs))
-      if (existing) return { ...existing, attributes: attrs }
-      return {
-        attributes: attrs,
-        sku: "",
-        price: "0",
-        stock: "0",
-        status: "active",
-        isNew: true,
+    const nextAttrs = variantAttributes(nextType?.attributes ?? [])
+    const nextSelections: SelectionsState = {}
+    for (const attr of nextAttrs) {
+      const curveId = attr.source_curve_id ?? null
+      nextSelections[attr.key] = {
+        curve_id: curveId,
+        values: effectiveOptions(attr, curves, curveId),
       }
+    }
+    setSelections(nextSelections)
+  }
+
+  function toggleValue(attrKey: string, value: string) {
+    setSelections((prev) => {
+      const cur = prev[attrKey] ?? { values: [], curve_id: null }
+      const set = new Set(cur.values)
+      if (set.has(value)) set.delete(value)
+      else set.add(value)
+      return { ...prev, [attrKey]: { ...cur, values: Array.from(set) } }
     })
-    setVariants(next)
+  }
+
+  function setAttrCurve(attrKey: string, curveId: string | null) {
+    const attr = variantAttrs.find((a) => a.key === attrKey)
+    if (!attr) return
+    const newOptions = effectiveOptions(attr, curves, curveId)
+    setSelections((prev) => ({
+      ...prev,
+      [attrKey]: { curve_id: curveId, values: newOptions },
+    }))
+  }
+
+  function selectAll(attrKey: string, all: boolean) {
+    const attr = variantAttrs.find((a) => a.key === attrKey)
+    if (!attr) return
+    setSelections((prev) => {
+      const cur = prev[attrKey] ?? { values: [], curve_id: null }
+      const opts = effectiveOptions(attr, curves, cur.curve_id)
+      return { ...prev, [attrKey]: { ...cur, values: all ? opts : [] } }
+    })
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (readonly) return
 
+    // Build attributes JSONB shape for storage
+    const attributesPayload = {
+      selections: Object.fromEntries(
+        Object.entries(selections).map(([k, v]) => [
+          k,
+          { values: v.values, curve_id: v.curve_id ?? null },
+        ]),
+      ),
+    }
+
     startTransition(async () => {
       const res = await saveProduct(tenantSlug, {
         id: initial?.product.id,
         type_id: typeId,
+        category_id: categoryId,
         name: name.trim(),
         sku: sku.trim() || null,
         description: description.trim() || null,
         status,
-        category: category.trim() || null,
         tags,
-        attributes: initial?.product.attributes ?? {},
+        attributes: attributesPayload,
         variants: variants.map((v) => ({
           id: v.id,
           attributes: v.attributes,
@@ -174,7 +295,7 @@ export function ProductForm({ tenantSlug, types, currency, mode, readonly, initi
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="p-type">Tipo</Label>
-            <Select value={typeId ?? "none"} onValueChange={(v) => regenerateVariants(v === "none" ? null : v)}>
+            <Select value={typeId ?? "none"} onValueChange={(v) => changeType(v === "none" ? null : v)}>
               <SelectTrigger id="p-type" disabled={readonly}>
                 <SelectValue placeholder="Sin tipo" />
               </SelectTrigger>
@@ -226,14 +347,32 @@ export function ProductForm({ tenantSlug, types, currency, mode, readonly, initi
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="p-cat">Categoría</Label>
-            <Input
-              id="p-cat"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Remeras"
-              disabled={readonly}
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="p-cat">Categoría</Label>
+              <Link
+                href={`/app/${tenantSlug}/categories`}
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Gestionar
+                <ExternalLink className="ml-0.5 inline h-3 w-3" aria-hidden="true" />
+              </Link>
+            </div>
+            <Select
+              value={categoryId ?? "none"}
+              onValueChange={(v) => setCategoryId(v === "none" ? null : v)}
+            >
+              <SelectTrigger id="p-cat" disabled={readonly}>
+                <SelectValue placeholder="Sin categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin categoría</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex flex-col gap-2 sm:col-span-2">
@@ -262,13 +401,123 @@ export function ProductForm({ tenantSlug, types, currency, mode, readonly, initi
       ) : (
         <section className="rounded-lg border border-dashed border-border bg-muted/30 p-5">
           <h2 className="font-display text-base font-bold text-foreground">Imágenes</h2>
-          <p className="text-xs text-muted-foreground">
-            Guardá el producto para poder subir imágenes.
-          </p>
+          <p className="text-xs text-muted-foreground">Guardá el producto para poder subir imágenes.</p>
         </section>
       )}
 
-      {/* Variants */}
+      {/* Variant attributes (per-product selection) */}
+      {variantAttrs.length > 0 ? (
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="mb-4">
+            <h2 className="font-display text-base font-bold text-foreground">Atributos de variante</h2>
+            <p className="text-xs text-muted-foreground">
+              Marcá solo los valores que aplican a este producto. La grilla se regenera automáticamente.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            {variantAttrs.map((attr) => {
+              const sel = selections[attr.key] ?? { values: [], curve_id: null }
+              const curveId = sel.curve_id ?? attr.source_curve_id ?? null
+              const options = effectiveOptions(attr, curves, curveId)
+              const allChecked = options.length > 0 && sel.values.length === options.length
+              const noneChecked = sel.values.length === 0
+
+              return (
+                <div key={attr.key} className="rounded-md border border-border bg-background p-4">
+                  <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h3 className="font-display text-sm font-bold text-foreground">{attr.label}</h3>
+                      <p className="font-mono text-[11px] text-muted-foreground">{attr.key}</p>
+                    </div>
+                    {curves.length > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground">Curva</Label>
+                        <Select
+                          value={curveId ?? "none"}
+                          onValueChange={(v) => setAttrCurve(attr.key, v === "none" ? null : v)}
+                        >
+                          <SelectTrigger className="h-8 w-56" disabled={readonly}>
+                            <SelectValue placeholder="Manual" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Manual (del tipo)</SelectItem>
+                            {curves.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {options.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                      No hay opciones disponibles. Editá el tipo de producto o la curva para agregar valores.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {options.map((opt) => {
+                          const checked = sel.values.includes(opt)
+                          return (
+                            <label
+                              key={opt}
+                              className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-xs transition ${
+                                checked
+                                  ? "border-primary bg-primary/10 text-foreground"
+                                  : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                              } ${readonly ? "pointer-events-none opacity-70" : ""}`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={checked}
+                                disabled={readonly}
+                                onChange={() => toggleValue(attr.key, opt)}
+                              />
+                              {opt}
+                            </label>
+                          )
+                        })}
+                      </div>
+                      {!readonly ? (
+                        <div className="mt-3 flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={allChecked}
+                            onClick={() => selectAll(attr.key, true)}
+                          >
+                            Marcar todos
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={noneChecked}
+                            onClick={() => selectAll(attr.key, false)}
+                          >
+                            Desmarcar
+                          </Button>
+                          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                            {sel.values.length}/{options.length} seleccionados
+                          </span>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Variants matrix */}
       <section className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-end justify-between gap-2">
           <div>

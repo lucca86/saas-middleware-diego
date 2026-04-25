@@ -15,6 +15,7 @@ const attributeSchema = z.object({
   label: z.string().min(1).max(80),
   type: z.enum(["text", "number", "select"]),
   options: z.array(z.string().min(1).max(80)).optional(),
+  source_curve_id: z.string().uuid().nullable().optional(),
   is_variant: z.boolean(),
   required: z.boolean().optional(),
   help: z.string().max(200).optional(),
@@ -44,12 +45,21 @@ export async function upsertProductType(
     return { ok: false, error: "Datos inválidos", fieldErrors: parsed.error.flatten().fieldErrors as never }
   }
 
-  // Validate variant attrs have at least one option
+  // Validate variant attrs have at least one option (manual or from a curve)
   for (const a of parsed.data.attributes) {
-    if (a.is_variant && (a.type !== "select" || !a.options || a.options.length === 0)) {
+    if (!a.is_variant) continue
+    if (a.type !== "select") {
       return {
         ok: false,
-        error: `El atributo "${a.label}" se usa como variante pero no tiene opciones definidas.`,
+        error: `El atributo "${a.label}" debe ser tipo Lista para generar variantes.`,
+      }
+    }
+    const hasManual = (a.options?.length ?? 0) > 0
+    const hasCurve = (a.source_curve_id ?? null) !== null
+    if (!hasManual && !hasCurve) {
+      return {
+        ok: false,
+        error: `El atributo "${a.label}" se usa como variante pero no tiene opciones (manuales o de una curva).`,
       }
     }
   }

@@ -8,11 +8,13 @@ import {
   Layers,
   Package,
   Plus,
+  Ruler,
   ScrollText,
   Settings,
   Share2,
   Sparkles,
   Store,
+  Tag,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -32,7 +34,9 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
   const items = [
     { href: `${base}/dashboard`, label: "Dashboard", icon: LayoutDashboard },
     { href: `${base}/products`, label: "Productos", icon: Package },
+    { href: `${base}/categories`, label: "Categorías", icon: Tag },
     { href: `${base}/product-types`, label: "Tipos", icon: Layers },
+    { href: `${base}/size-curves`, label: "Curvas de talles", icon: Ruler },
     { href: `${base}/storefront`, label: "Storefront", icon: Store },
     { href: `${base}/channels`, label: "Canales", icon: Share2 },
     { href: `${base}/sync`, label: "Sync Logs", icon: ScrollText },

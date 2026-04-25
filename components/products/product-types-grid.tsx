@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner"
 import { ProductTypeEditor } from "./product-type-editor"
 import { deleteProductType } from "@/app/app/[tenant]/product-types/actions"
-import type { ProductType } from "@/lib/products/types"
+import type { ProductType, SizeCurve } from "@/lib/products/types"
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   package: Package,
@@ -31,10 +31,11 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 interface Props {
   tenantSlug: string
   types: ProductType[]
+  curves: SizeCurve[]
   canEdit: boolean
 }
 
-export function ProductTypesGrid({ tenantSlug, types, canEdit }: Props) {
+export function ProductTypesGrid({ tenantSlug, types, curves, canEdit }: Props) {
   const [editing, setEditing] = useState<ProductType | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -42,6 +43,12 @@ export function ProductTypesGrid({ tenantSlug, types, canEdit }: Props) {
     const res = await deleteProductType(tenantSlug, id)
     if (!res.ok) toast.error(res.error ?? "No se pudo eliminar")
     else toast.success("Tipo eliminado")
+  }
+
+  function curveCount(curveId: string | null | undefined): number | null {
+    if (!curveId) return null
+    const c = curves.find((x) => x.id === curveId)
+    return c?.values.length ?? null
   }
 
   return (
@@ -87,14 +94,17 @@ export function ProductTypesGrid({ tenantSlug, types, canEdit }: Props) {
 
               {variantAttrs.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {variantAttrs.map((a) => (
-                    <Badge key={a.key} variant="outline" className="font-normal">
-                      {a.label}
-                      {a.options && a.options.length > 0 ? (
-                        <span className="ml-1 text-muted-foreground">· {a.options.length}</span>
-                      ) : null}
-                    </Badge>
-                  ))}
+                  {variantAttrs.map((a) => {
+                    const fromCurve = curveCount(a.source_curve_id)
+                    const count = fromCurve ?? a.options?.length ?? 0
+                    return (
+                      <Badge key={a.key} variant="outline" className="font-normal">
+                        {a.label}
+                        {count > 0 ? <span className="ml-1 text-muted-foreground">· {count}</span> : null}
+                        {fromCurve !== null ? <span className="ml-1 text-primary">·curva</span> : null}
+                      </Badge>
+                    )
+                  })}
                 </div>
               ) : null}
 
@@ -149,6 +159,7 @@ export function ProductTypesGrid({ tenantSlug, types, canEdit }: Props) {
         tenantSlug={tenantSlug}
         open={creating || editing !== null}
         editing={editing}
+        curves={curves}
         onOpenChange={(o) => {
           if (!o) {
             setCreating(false)

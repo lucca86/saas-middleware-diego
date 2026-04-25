@@ -2,16 +2,20 @@ import "server-only"
 import { createClient } from "@/lib/supabase/server"
 import type {
   AttributeDef,
+  Category,
   Product,
+  ProductAttributesData,
   ProductType,
   ProductVariant,
   ProductWithCounts,
+  SizeCurve,
 } from "./types"
 
 export interface ProductListFilters {
   search?: string
   status?: "all" | "draft" | "active" | "archived"
   typeId?: string
+  categoryId?: string
 }
 
 /** List product types for a tenant. */
@@ -48,6 +52,32 @@ export async function getProductType(
   return { ...data, attributes: (data.attributes ?? []) as AttributeDef[] }
 }
 
+export async function listCategories(tenantId: string): Promise<Category[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("position", { ascending: true })
+    .order("name", { ascending: true })
+
+  if (error) throw error
+  return (data ?? []) as Category[]
+}
+
+export async function listSizeCurves(tenantId: string): Promise<SizeCurve[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("size_curves")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("is_system", { ascending: false })
+    .order("name", { ascending: true })
+
+  if (error) throw error
+  return (data ?? []).map((c) => ({ ...c, values: c.values ?? [] })) as SizeCurve[]
+}
+
 /**
  * Paginated product listing with filters. Uses a single query + client-side
  * aggregation for the variant counts (simpler than an RPC for now).
@@ -61,9 +91,10 @@ export async function listProducts(
     .from("products")
     .select(
       `
-      id, tenant_id, type_id, sku, name, slug, description, status,
+      id, tenant_id, type_id, category_id, sku, name, slug, description, status,
       category, tags, attributes, created_at, updated_at,
       product_types!products_type_id_fkey(name),
+      categories!products_category_id_fkey(name),
       product_variants(id, price, stock),
       product_images(url, is_primary, position)
       `,
@@ -81,6 +112,9 @@ export async function listProducts(
   if (filters.typeId) {
     q = q.eq("type_id", filters.typeId)
   }
+  if (filters.categoryId) {
+    q = q.eq("category_id", filters.categoryId)
+  }
 
   const { data, error } = await q
   if (error) throw error
@@ -88,6 +122,7 @@ export async function listProducts(
   return (data ?? []).map((p) => {
     const variants = (p.product_variants ?? []) as Array<{ price: number; stock: number }>
     const ptype = Array.isArray(p.product_types) ? p.product_types[0] : p.product_types
+    const cat = Array.isArray(p.categories) ? p.categories[0] : p.categories
     const prices = variants.map((v) => Number(v.price)).filter((n) => !Number.isNaN(n))
     const images = (p.product_images ?? []) as Array<{ url: string; is_primary: boolean; position: number }>
     const primary =
@@ -98,6 +133,7 @@ export async function listProducts(
       id: p.id,
       tenant_id: p.tenant_id,
       type_id: p.type_id,
+      category_id: p.category_id,
       sku: p.sku,
       name: p.name,
       slug: p.slug,
@@ -105,13 +141,14 @@ export async function listProducts(
       status: p.status,
       category: p.category,
       tags: p.tags ?? [],
-      attributes: p.attributes ?? {},
+      attributes: (p.attributes ?? {}) as ProductAttributesData,
       created_at: p.created_at,
       updated_at: p.updated_at,
       variant_count: variants.length,
       total_stock: variants.reduce((acc, v) => acc + (v.stock ?? 0), 0),
       min_price: prices.length > 0 ? Math.min(...prices) : null,
       type_name: ptype?.name ?? null,
+      category_name: cat?.name ?? null,
       primary_image_url: primary?.url ?? null,
     } as ProductWithCounts
   })
@@ -143,7 +180,11 @@ export async function getProduct(
   if (vErr) throw vErr
 
   return {
-    product: { ...product, tags: product.tags ?? [], attributes: product.attributes ?? {} } as Product,
+    product: {
+      ...product,
+      tags: product.tags ?? [],
+      attributes: (product.attributes ?? {}) as ProductAttributesData,
+    } as Product,
     variants: (variants ?? []) as ProductVariant[],
   }
 }

@@ -1,5 +1,8 @@
+import Link from "next/link"
+import { Ruler } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
-import { listProductTypes } from "@/lib/products/queries"
+import { listProductTypes, listSizeCurves } from "@/lib/products/queries"
+import { Button } from "@/components/ui/button"
 import { ProductTypesGrid } from "@/components/products/product-types-grid"
 
 export const metadata = {
@@ -13,7 +16,7 @@ export default async function ProductTypesPage({
 }) {
   const { tenant: slug } = await params
   const { tenant, role } = await requireTenant(slug)
-  const types = await listProductTypes(tenant.id)
+  const [types, curves] = await Promise.all([listProductTypes(tenant.id), listSizeCurves(tenant.id)])
 
   const canEdit = role === "owner" || role === "admin" || role === "operator"
 
@@ -29,14 +32,20 @@ export default async function ProductTypesPage({
               Tipos de producto
             </h1>
             <p className="mt-2 max-w-2xl text-pretty text-sm text-muted-foreground leading-relaxed">
-              Definí qué atributos tiene cada tipo de producto y cuáles generan variantes. Indumentaria, calzado o
-              cualquier categoría que necesites.
+              Definí qué atributos tiene cada tipo de producto y cuáles generan variantes. Conectá atributos a
+              curvas de talles reutilizables para no escribir las opciones a mano.
             </p>
           </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/app/${slug}/size-curves`}>
+              <Ruler className="mr-1.5 h-4 w-4" />
+              Curvas de talles
+            </Link>
+          </Button>
         </div>
       </header>
 
-      <ProductTypesGrid tenantSlug={slug} types={types} canEdit={canEdit} />
+      <ProductTypesGrid tenantSlug={slug} types={types} curves={curves} canEdit={canEdit} />
     </div>
   )
 }

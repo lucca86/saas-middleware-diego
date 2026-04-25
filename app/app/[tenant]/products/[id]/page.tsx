@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { requireTenant } from "@/lib/tenant/context"
-import { getProduct, listProductTypes } from "@/lib/products/queries"
+import { getProduct, listCategories, listProductTypes, listSizeCurves } from "@/lib/products/queries"
 import { listProductImages } from "@/lib/products/images"
 import { ProductForm } from "@/components/products/product-form"
 
@@ -16,9 +16,11 @@ export default async function EditProductPage({
   const { tenant: slug, id } = await params
   const { tenant, role } = await requireTenant(slug)
 
-  const [data, types, images] = await Promise.all([
+  const [data, types, categories, curves, images] = await Promise.all([
     getProduct(tenant.id, id),
     listProductTypes(tenant.id),
+    listCategories(tenant.id),
+    listSizeCurves(tenant.id),
     listProductImages(tenant.id, id),
   ])
   if (!data) notFound()
@@ -34,6 +36,8 @@ export default async function EditProductPage({
       <ProductForm
         tenantSlug={slug}
         types={types}
+        categories={categories}
+        curves={curves}
         mode="edit"
         currency={tenant.currency}
         readonly={role === "viewer"}
