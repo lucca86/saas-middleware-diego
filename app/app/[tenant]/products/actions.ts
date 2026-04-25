@@ -120,13 +120,12 @@ export async function saveProduct(
   }
 
   const incomingIds = new Set<string>()
-  const toUpsert: Array<Record<string, unknown>> = []
+  const toInsert: Array<Record<string, unknown>> = []
+  const toUpdate: Array<{ id: string; row: Record<string, unknown> }> = []
 
   data.variants.forEach((v, idx) => {
     const id = v.id ?? existingByKey.get(variantKey(v.attributes))
-    if (id) incomingIds.add(id)
-    toUpsert.push({
-      id,
+    const row: Record<string, unknown> = {
       tenant_id: tenant.id,
       product_id: productId,
       attributes: v.attributes,
@@ -138,13 +137,27 @@ export async function saveProduct(
       stock: v.stock,
       status: v.status,
       position: idx,
-    })
+    }
+    if (id) {
+      incomingIds.add(id)
+      toUpdate.push({ id, row })
+    } else {
+      // New row: omit id entirely so the gen_random_uuid() default kicks in.
+      toInsert.push(row)
+    }
   })
 
-  if (toUpsert.length > 0) {
+  if (toInsert.length > 0) {
+    const { error: insErr } = await supabase.from("product_variants").insert(toInsert)
+    if (insErr) return { ok: false, error: insErr.message }
+  }
+
+  for (const { id, row } of toUpdate) {
     const { error: upErr } = await supabase
       .from("product_variants")
-      .upsert(toUpsert, { onConflict: "id" })
+      .update(row)
+      .eq("id", id)
+      .eq("tenant_id", tenant.id)
     if (upErr) return { ok: false, error: upErr.message }
   }
 
