@@ -213,6 +213,34 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "cv11";
   }
+
+  /* Storefront público — fuerza tema claro y opcionalmente reemplaza el
+     accent con el color elegido por el tenant (--accent-brand). */
+  [data-storefront],
+  .dark [data-storefront] {
+    --background: #ffffff;
+    --foreground: #0a1428;
+    --card: #ffffff;
+    --card-foreground: #0a1428;
+    --popover: #ffffff;
+    --popover-foreground: #0a1428;
+    --primary: var(--accent-brand, #0a1428);
+    --primary-foreground: #ffffff;
+    --secondary: #f4f6fb;
+    --secondary-foreground: #0a1428;
+    --muted: #f4f6fb;
+    --muted-foreground: #64748b;
+    --accent: #f1f5fb;
+    --accent-foreground: #0a1428;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --success: #10b981;
+    --success-foreground: #ffffff;
+    --border: #e6ebf3;
+    --input: #e6ebf3;
+    --ring: var(--accent-brand, #0a1428);
+    color-scheme: light;
+  }
   h1,
   h2,
   h3,
