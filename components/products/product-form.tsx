@@ -32,13 +32,14 @@ import { TagsInput } from "./tags-input"
 import { VariantsMatrix, type VariantRow } from "./variants-matrix"
 import { ProductImagesUploader } from "./product-images-uploader"
 import { deleteProduct, saveProduct } from "@/app/app/[tenant]/products/actions"
-import type {
-  AttributeSelection,
-  Category,
-  Product,
-  ProductType,
-  ProductVariant,
-  SizeCurve,
+import {
+  OPTION_LIST_KIND_LABELS,
+  type AttributeSelection,
+  type Category,
+  type Product,
+  type ProductType,
+  type ProductVariant,
+  type SizeCurve,
 } from "@/lib/products/types"
 import type { ProductImage } from "@/lib/products/images"
 
@@ -432,7 +433,7 @@ export function ProductForm({
                     </div>
                     {curves.length > 0 ? (
                       <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground">Curva</Label>
+                        <Label className="text-xs text-muted-foreground">Lista</Label>
                         <Select
                           value={curveId ?? "none"}
                           onValueChange={(v) => setAttrCurve(attr.key, v === "none" ? null : v)}
@@ -444,6 +445,9 @@ export function ProductForm({
                             <SelectItem value="none">Manual (del tipo)</SelectItem>
                             {curves.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
+                                <span className="text-muted-foreground">
+                                  [{OPTION_LIST_KIND_LABELS[c.kind ?? "size"]}]
+                                </span>{" "}
                                 {c.name}
                               </SelectItem>
                             ))}

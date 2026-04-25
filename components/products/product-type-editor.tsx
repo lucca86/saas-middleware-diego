@@ -20,7 +20,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { upsertProductType } from "@/app/app/[tenant]/product-types/actions"
-import type { AttributeDef, ProductType, SizeCurve } from "@/lib/products/types"
+import {
+  OPTION_LIST_KIND_LABELS,
+  type AttributeDef,
+  type OptionListKind,
+  type ProductType,
+  type SizeCurve,
+} from "@/lib/products/types"
 import { slugify } from "@/lib/products/slug"
 
 interface Props {
@@ -212,7 +218,7 @@ export function ProductTypeEditor({ tenantSlug, open, editing, curves, onOpenCha
                         <div className="sm:col-span-5">
                           {a.type === "select" ? (
                             <>
-                              <Label className="mb-1 text-xs">Curva de talles (opcional)</Label>
+                              <Label className="mb-1 text-xs">Lista de opciones (opcional)</Label>
                               <Select
                                 value={a.source_curve_id ?? "none"}
                                 onValueChange={(v) =>
@@ -223,16 +229,30 @@ export function ProductTypeEditor({ tenantSlug, open, editing, curves, onOpenCha
                                 }
                               >
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Sin curva (opciones manuales)" />
+                                  <SelectValue placeholder="Sin lista (opciones manuales)" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="none">Sin curva (manual)</SelectItem>
-                                  {curves.map((c) => (
-                                    <SelectItem key={c.id} value={c.id}>
-                                      {c.name}{" "}
-                                      <span className="text-muted-foreground">({c.values.length})</span>
-                                    </SelectItem>
-                                  ))}
+                                  <SelectItem value="none">Sin lista (manual)</SelectItem>
+                                  {(["size", "color", "material", "other"] as OptionListKind[]).flatMap(
+                                    (kind) => {
+                                      const group = curves.filter((c) => (c.kind ?? "size") === kind)
+                                      if (group.length === 0) return []
+                                      return [
+                                        <div
+                                          key={`label-${kind}`}
+                                          className="px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground"
+                                        >
+                                          {OPTION_LIST_KIND_LABELS[kind]}
+                                        </div>,
+                                        ...group.map((c) => (
+                                          <SelectItem key={c.id} value={c.id}>
+                                            {c.name}{" "}
+                                            <span className="text-muted-foreground">({c.values.length})</span>
+                                          </SelectItem>
+                                        )),
+                                      ]
+                                    },
+                                  )}
                                 </SelectContent>
                               </Select>
                             </>

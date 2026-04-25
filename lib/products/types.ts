@@ -46,12 +46,22 @@ export interface Category {
   updated_at: string
 }
 
+export type OptionListKind = "size" | "color" | "material" | "other"
+
+export const OPTION_LIST_KIND_LABELS: Record<OptionListKind, string> = {
+  size: "Talles",
+  color: "Colores",
+  material: "Materiales",
+  other: "Otra",
+}
+
 export interface SizeCurve {
   id: string
   tenant_id: string
   name: string
   slug: string
   description: string | null
+  kind: OptionListKind
   values: string[]
   is_system: boolean
   created_at: string

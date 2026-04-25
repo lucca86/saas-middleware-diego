@@ -10,11 +10,12 @@ const upsertSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(2).max(60),
   slug: z.string().min(2).max(60).optional(),
+  kind: z.enum(["size", "color", "material", "other"]).default("size"),
   description: z.string().max(300).optional(),
   values: z
     .array(z.string().min(1).max(40))
-    .min(1, "Agregá al menos un talle")
-    .max(60, "Demasiados talles"),
+    .min(1, "Agregá al menos un valor")
+    .max(60, "Demasiados valores"),
 })
 
 export type SizeCurveFormState = { ok: boolean; error?: string }
@@ -46,6 +47,7 @@ export async function upsertSizeCurve(
       .update({
         name: parsed.data.name,
         slug,
+        kind: parsed.data.kind,
         description: parsed.data.description ?? null,
         values,
       })
@@ -60,6 +62,7 @@ export async function upsertSizeCurve(
       tenant_id: tenant.id,
       name: parsed.data.name,
       slug,
+      kind: parsed.data.kind,
       description: parsed.data.description ?? null,
       values,
       is_system: false,

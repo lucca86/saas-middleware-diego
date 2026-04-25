@@ -36,7 +36,7 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
     { href: `${base}/products`, label: "Productos", icon: Package },
     { href: `${base}/categories`, label: "Categorías", icon: Tag },
     { href: `${base}/product-types`, label: "Tipos", icon: Layers },
-    { href: `${base}/size-curves`, label: "Curvas de talles", icon: Ruler },
+    { href: `${base}/size-curves`, label: "Listas de opciones", icon: Ruler },
     { href: `${base}/storefront`, label: "Storefront", icon: Store },
     { href: `${base}/channels`, label: "Canales", icon: Share2 },
     { href: `${base}/sync`, label: "Sync Logs", icon: ScrollText },

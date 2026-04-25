@@ -14,20 +14,46 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Spinner } from "@/components/ui/spinner"
 import { upsertSizeCurve } from "@/app/app/[tenant]/size-curves/actions"
-import type { SizeCurve } from "@/lib/products/types"
+import type { OptionListKind, SizeCurve } from "@/lib/products/types"
 
 interface Props {
   tenantSlug: string
   open: boolean
   editing: SizeCurve | null
+  defaultKind?: OptionListKind
   onOpenChange: (open: boolean) => void
 }
 
-export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Props) {
+const PLACEHOLDERS: Record<OptionListKind, { name: string; values: string; description: string }> = {
+  size: {
+    name: "1 a 5 años",
+    values: "1a2 años, 2a3 años, 3a4 años",
+    description: "Para indumentaria infantil",
+  },
+  color: {
+    name: "Básicos",
+    values: "Negro, Blanco, Gris, Azul",
+    description: "Paleta base de la temporada",
+  },
+  material: {
+    name: "Materiales",
+    values: "Algodón, Lino, Poliéster",
+    description: "Composiciones disponibles",
+  },
+  other: {
+    name: "Capacidades",
+    values: "250ml, 500ml, 1L",
+    description: "Lista personalizada",
+  },
+}
+
+export function SizeCurveEditor({ tenantSlug, open, editing, defaultKind = "size", onOpenChange }: Props) {
   const [name, setName] = useState("")
+  const [kind, setKind] = useState<OptionListKind>(defaultKind)
   const [description, setDescription] = useState("")
   const [values, setValues] = useState<string[]>([])
   const [draft, setDraft] = useState("")
@@ -36,17 +62,22 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
   useEffect(() => {
     if (open) {
       setName(editing?.name ?? "")
+      setKind(editing?.kind ?? defaultKind)
       setDescription(editing?.description ?? "")
       setValues(editing?.values ?? [])
       setDraft("")
     }
-  }, [open, editing])
+  }, [open, editing, defaultKind])
+
+  const ph = PLACEHOLDERS[kind]
+  const valueLabel =
+    kind === "size" ? "Talles" : kind === "color" ? "Colores" : kind === "material" ? "Materiales" : "Valores"
 
   function addDraft() {
     const t = draft.trim()
     if (!t) return
     if (values.includes(t)) {
-      toast.error("Ese valor ya existe en la curva")
+      toast.error("Ese valor ya existe en la lista")
       return
     }
     setValues((prev) => [...prev, t])
@@ -90,13 +121,14 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (values.length === 0) {
-      toast.error("Agregá al menos un talle")
+      toast.error("Agregá al menos un valor")
       return
     }
     startTransition(async () => {
       const res = await upsertSizeCurve(tenantSlug, {
         id: editing?.id,
         name: name.trim(),
+        kind,
         description: description.trim() || undefined,
         values,
       })
@@ -104,7 +136,7 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
         toast.error(res.error ?? "No se pudo guardar")
         return
       }
-      toast.success(editing ? "Curva actualizada" : "Curva creada")
+      toast.success(editing ? "Lista actualizada" : "Lista creada")
       onOpenChange(false)
     })
   }
@@ -113,16 +145,30 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editing ? `Editar ${editing.name}` : "Nueva curva de talles"}</DialogTitle>
+          <DialogTitle>{editing ? `Editar ${editing.name}` : "Nueva lista de opciones"}</DialogTitle>
           <DialogDescription>
-            Listá los talles en el orden en que querés que aparezcan en las grillas. Podés pegar varios separados por
-            coma o salto de línea.
+            Listá los valores en el orden en que querés que aparezcan en las grillas. Podés pegar varios separados
+            por coma o salto de línea.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-2">
+              <Label htmlFor="sc-kind">Tipo de lista</Label>
+              <Select value={kind} onValueChange={(v) => setKind(v as OptionListKind)}>
+                <SelectTrigger id="sc-kind">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="size">Talles</SelectItem>
+                  <SelectItem value="color">Colores</SelectItem>
+                  <SelectItem value="material">Materiales</SelectItem>
+                  <SelectItem value="other">Otra</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="sc-name">Nombre</Label>
               <Input
                 id="sc-name"
@@ -130,23 +176,23 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
                 onChange={(e) => setName(e.target.value)}
                 required
                 minLength={2}
-                placeholder="1 a 5 años"
+                placeholder={ph.name}
               />
             </div>
-            <div className="flex flex-col gap-2 sm:col-span-1">
+            <div className="flex flex-col gap-2 sm:col-span-3">
               <Label htmlFor="sc-desc">Descripción (opcional)</Label>
               <Textarea
                 id="sc-desc"
                 rows={1}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Para indumentaria infantil"
+                placeholder={ph.description}
               />
             </div>
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border border-border bg-card/40 p-4">
-            <Label>Talles</Label>
+            <Label>{valueLabel}</Label>
             <div className="flex items-center gap-2">
               <Input
                 value={draft}
@@ -164,7 +210,7 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
                     bulkAdd(text)
                   }
                 }}
-                placeholder="Ej: 1a2 años, 2a3 años, 3a4 años"
+                placeholder={`Ej: ${ph.values}`}
               />
               <Button type="button" variant="outline" size="sm" onClick={addDraft}>
                 <Plus className="mr-1 h-3.5 w-3.5" />
@@ -231,7 +277,7 @@ export function SizeCurveEditor({ tenantSlug, open, editing, onOpenChange }: Pro
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending ? <Spinner className="mr-2 h-4 w-4" /> : null}
-              {editing ? "Guardar cambios" : "Crear curva"}
+              {editing ? "Guardar cambios" : "Crear lista"}
             </Button>
           </DialogFooter>
         </form>
