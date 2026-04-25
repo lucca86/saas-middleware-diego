@@ -226,22 +226,19 @@ export function StorefrontProductDetail({
         {/* CTA */}
         <div className="mt-8">
           {waUrl ? (
-            <Button
-              asChild
-              size="lg"
-              className="w-full"
-              disabled={!selected || !inStock}
-            >
-              <a
-                href={waUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-disabled={!selected || !inStock}
-              >
+            selected ? (
+              <Button asChild size="lg" className="w-full">
+                <a href={waUrl} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  {inStock ? "Consultar por WhatsApp" : "Consultar disponibilidad"}
+                </a>
+              </Button>
+            ) : (
+              <Button size="lg" className="w-full" disabled>
                 <MessageCircle className="mr-2 h-4 w-4" />
-                {inStock ? "Consultar por WhatsApp" : "Consultar disponibilidad"}
-              </a>
-            </Button>
+                Combinación no disponible
+              </Button>
+            )
           ) : (
             <div className="rounded-md border border-dashed border-border bg-card/30 px-4 py-3 text-center text-sm text-muted-foreground">
               Esta tienda todavía no configuró un canal de contacto.
