@@ -68,37 +68,25 @@ export async function createTenantAction(
       { onConflict: "id" },
     )
 
-  const { data: tenant, error: tenantErr } = await supabase
-    .from("tenants")
-    .insert({
-      name,
-      slug,
-      business_type: businessType,
-      currency,
-      created_by: user.id,
+  const { data, error: rpcErr } = await supabase
+    .rpc("create_tenant_with_owner", {
+      p_name: name,
+      p_slug: slug,
+      p_business_type: businessType,
+      p_currency: currency,
     })
-    .select("id, slug")
-    .single()
+    .single<{ id: string; slug: string }>()
 
-  if (tenantErr || !tenant) {
-    if (tenantErr?.code === "23505") {
+  if (rpcErr || !data) {
+    if (rpcErr?.code === "23505" || /already taken/i.test(rpcErr?.message ?? "")) {
       return { ok: false, error: "Ese identificador ya está en uso." }
     }
-    console.log("[v0] createTenant error:", tenantErr)
-    return { ok: false, error: tenantErr?.message ?? "No pudimos crear el espacio" }
+    if (rpcErr?.code === "42501") {
+      return { ok: false, error: "Tu sesión expiró. Iniciá sesión nuevamente." }
+    }
+    console.log("[v0] create_tenant_with_owner error:", rpcErr)
+    return { ok: false, error: rpcErr?.message ?? "No pudimos crear el espacio" }
   }
 
-  const { error: memberErr } = await supabase.from("tenant_members").insert({
-    tenant_id: tenant.id,
-    user_id: user.id,
-    role: "owner",
-  })
-
-  if (memberErr) {
-    await supabase.from("tenants").delete().eq("id", tenant.id)
-    console.log("[v0] tenant_members insert error:", memberErr)
-    return { ok: false, error: memberErr.message }
-  }
-
-  return { ok: true, slug: tenant.slug, tenantId: tenant.id }
+  return { ok: true, slug: data.slug, tenantId: data.id }
 }
