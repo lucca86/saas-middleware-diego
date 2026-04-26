@@ -122,6 +122,42 @@ export async function signProductImageUpload(opts: {
   return { storageKey, uploadUrl, publicUrl }
 }
 
+/**
+ * Upload bytes server-side. Avoids browser CORS issues that arise when a client
+ * tries to PUT directly to R2 from arbitrary origins.
+ */
+export async function uploadProductImageDirect(opts: {
+  tenantId: string
+  productId: string
+  contentType: string
+  body: Buffer | Uint8Array
+}): Promise<{ storageKey: string; publicUrl: string }> {
+  if (!ALLOWED_IMAGE_TYPES.has(opts.contentType)) {
+    throw new Error("Tipo de archivo no soportado")
+  }
+  if (opts.body.byteLength > MAX_UPLOAD_BYTES) {
+    throw new Error("El archivo supera el límite de 10 MB")
+  }
+
+  const client = getClient()
+  const ext = extFromMime(opts.contentType)
+  const id = randomUUID()
+  const storageKey = `tenants/${opts.tenantId}/products/${opts.productId}/${id}.${ext}`
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: env("R2_BUCKET"),
+      Key: storageKey,
+      ContentType: opts.contentType,
+      ContentLength: opts.body.byteLength,
+      Body: opts.body,
+    }),
+  )
+
+  const publicUrl = `${env("R2_PUBLIC_URL").replace(/\/$/, "")}/${storageKey}`
+  return { storageKey, publicUrl }
+}
+
 /** Delete an object by its storage key. Used when removing an image. */
 export async function deleteR2Object(storageKey: string): Promise<void> {
   if (!r2IsConfigured()) return

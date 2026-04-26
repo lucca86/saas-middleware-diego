@@ -9,7 +9,6 @@ import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
-  registerProductImage,
   deleteProductImage,
   setPrimaryImage,
   reorderProductImages,
@@ -67,64 +66,51 @@ export function ProductImagesUploader({ tenantSlug, productId, initial, readonly
         setUploading((u) => [...u, { id: tempId, name: file.name }])
 
         try {
-          // 1. Ask server for a signed PUT URL
-          const signRes = await fetch("/api/uploads/sign", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productId,
-              filename: file.name,
-              contentType: file.type,
-              contentLength: file.size,
-            }),
-          })
-          if (!signRes.ok) {
-            const j = await signRes.json().catch(() => ({}))
-            throw new Error(j.error ?? "No se pudo firmar la subida")
-          }
-          const { uploadUrl, publicUrl, storageKey } = (await signRes.json()) as {
-            uploadUrl: string
-            publicUrl: string
-            storageKey: string
-          }
-
-          // 2. Upload directly to R2
+          // Read natural dimensions client-side so we can persist them without
+          // decoding the image on the server.
           const dims = await readDimensions(file)
-          const putRes = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": file.type },
-            body: file,
-          })
-          if (!putRes.ok) throw new Error("Falló la subida a R2")
 
-          // 3. Register the image in our DB
-          const reg = await registerProductImage(tenantSlug, {
-            productId,
-            storageKey,
-            url: publicUrl,
-            width: dims?.width ?? null,
-            height: dims?.height ?? null,
-            sizeBytes: file.size,
-            mimeType: file.type,
-          })
-          if (!reg.ok) throw new Error(reg.error)
+          // Single multipart POST: server uploads to R2 and inserts the row.
+          // Avoids browser-to-R2 CORS issues entirely.
+          const form = new FormData()
+          form.append("productId", productId)
+          form.append("file", file, file.name)
+          if (dims?.width) form.append("width", String(dims.width))
+          if (dims?.height) form.append("height", String(dims.height))
 
-          // 4. Optimistically add it to the gallery
+          const res = await fetch("/api/uploads/direct", { method: "POST", body: form })
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}))
+            throw new Error(j.error ?? "No se pudo subir la imagen")
+          }
+          const reg = (await res.json()) as {
+            id: string
+            storageKey: string
+            url: string
+            width: number | null
+            height: number | null
+            sizeBytes: number
+            mimeType: string
+            isPrimary: boolean
+            position: number
+          }
+
+          // Optimistically add it to the gallery
           setImages((prev) => [
             ...prev,
             {
               id: reg.id,
               product_id: productId,
               variant_id: null,
-              storage_key: storageKey,
-              url: publicUrl,
-              width: dims?.width ?? null,
-              height: dims?.height ?? null,
-              size_bytes: file.size,
-              mime_type: file.type,
+              storage_key: reg.storageKey,
+              url: reg.url,
+              width: reg.width,
+              height: reg.height,
+              size_bytes: reg.sizeBytes,
+              mime_type: reg.mimeType,
               alt: null,
-              position: prev.length,
-              is_primary: prev.length === 0,
+              position: reg.position,
+              is_primary: reg.isPrimary,
               created_at: new Date().toISOString(),
             },
           ])
