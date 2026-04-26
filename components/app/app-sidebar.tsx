@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
+  Boxes,
   LayoutDashboard,
   Layers,
   Package,
@@ -34,6 +35,7 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
   const items = [
     { href: `${base}/dashboard`, label: "Dashboard", icon: LayoutDashboard },
     { href: `${base}/products`, label: "Productos", icon: Package },
+    { href: `${base}/stock`, label: "Stock", icon: Boxes },
     { href: `${base}/categories`, label: "Categorías", icon: Tag },
     { href: `${base}/product-types`, label: "Tipos", icon: Layers },
     { href: `${base}/size-curves`, label: "Listas de opciones", icon: Ruler },

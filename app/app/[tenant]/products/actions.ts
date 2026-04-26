@@ -120,36 +120,86 @@ export async function saveProduct(
   }
 
   const incomingIds = new Set<string>()
+  // Track variantKey -> initial stock for newly created variants so we can
+  // insert one `initial` stock movement per variant after they're created.
+  // The variants themselves are inserted with stock=0; the trigger applies
+  // the delta and keeps the cached column in sync.
+  const initialStockByKey = new Map<string, number>()
   const toInsert: Array<Record<string, unknown>> = []
   const toUpdate: Array<{ id: string; row: Record<string, unknown> }> = []
 
   data.variants.forEach((v, idx) => {
     const id = v.id ?? existingByKey.get(variantKey(v.attributes))
-    const row: Record<string, unknown> = {
-      tenant_id: tenant.id,
-      product_id: productId,
-      attributes: v.attributes,
-      sku: v.sku || null,
-      barcode: v.barcode || null,
-      price: v.price,
-      compare_at_price: v.compare_at_price ?? null,
-      cost: v.cost ?? null,
-      stock: v.stock,
-      status: v.status,
-      position: idx,
-    }
     if (id) {
+      // Existing variant: NEVER write stock from here. Stock changes must
+      // flow through stock_movements so the audit log stays complete. The
+      // user updates stock from the dedicated dialog.
       incomingIds.add(id)
-      toUpdate.push({ id, row })
+      toUpdate.push({
+        id,
+        row: {
+          tenant_id: tenant.id,
+          product_id: productId,
+          attributes: v.attributes,
+          sku: v.sku || null,
+          barcode: v.barcode || null,
+          price: v.price,
+          compare_at_price: v.compare_at_price ?? null,
+          cost: v.cost ?? null,
+          status: v.status,
+          position: idx,
+        },
+      })
     } else {
-      // New row: omit id entirely so the gen_random_uuid() default kicks in.
-      toInsert.push(row)
+      // New variant: insert at stock=0; we record an initial movement with
+      // the requested qty after the insert so the trigger applies it.
+      const key = variantKey(v.attributes)
+      if (v.stock > 0) initialStockByKey.set(key, v.stock)
+      toInsert.push({
+        tenant_id: tenant.id,
+        product_id: productId,
+        attributes: v.attributes,
+        sku: v.sku || null,
+        barcode: v.barcode || null,
+        price: v.price,
+        compare_at_price: v.compare_at_price ?? null,
+        cost: v.cost ?? null,
+        stock: 0,
+        status: v.status,
+        position: idx,
+      })
     }
   })
 
   if (toInsert.length > 0) {
-    const { error: insErr } = await supabase.from("product_variants").insert(toInsert)
+    const { data: created, error: insErr } = await supabase
+      .from("product_variants")
+      .insert(toInsert)
+      .select("id, attributes")
     if (insErr) return { ok: false, error: insErr.message }
+
+    // Record initial stock movements for variants that were created with stock > 0.
+    const initialMovements = (created ?? [])
+      .map((row) => {
+        const qty = initialStockByKey.get(variantKey(row.attributes ?? {}))
+        if (!qty || qty <= 0) return null
+        return {
+          tenant_id: tenant.id,
+          product_id: productId,
+          variant_id: row.id,
+          type: "initial" as const,
+          qty,
+          reason: "Stock inicial",
+          notes: "Movimiento generado al crear la variante.",
+          created_by: user.id,
+        }
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+
+    if (initialMovements.length > 0) {
+      const { error: movErr } = await supabase.from("stock_movements").insert(initialMovements)
+      if (movErr) return { ok: false, error: movErr.message }
+    }
   }
 
   for (const { id, row } of toUpdate) {

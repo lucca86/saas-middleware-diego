@@ -535,6 +535,8 @@ export function ProductForm({
         </div>
 
         <VariantsMatrix
+          tenantSlug={tenantSlug}
+          productName={name || "Producto"}
           variantAttrs={variantAttrs}
           variants={variants}
           onChange={setVariants}

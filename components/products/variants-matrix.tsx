@@ -1,10 +1,12 @@
 "use client"
 
-import { Archive, RotateCcw } from "lucide-react"
+import { useState } from "react"
+import { Archive, History, Plus, RotateCcw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty"
+import { StockMovementDialog } from "@/components/stock/stock-movement-dialog"
 import type { AttributeDef } from "@/lib/products/types"
 
 export interface VariantRow {
@@ -18,6 +20,10 @@ export interface VariantRow {
 }
 
 interface Props {
+  /** Used to scope the stock-movement dialog to the right tenant. */
+  tenantSlug: string
+  /** Used to label the stock movement dialog header. */
+  productName: string
   variantAttrs: AttributeDef[]
   variants: VariantRow[]
   onChange: (rows: VariantRow[]) => void
@@ -25,7 +31,17 @@ interface Props {
   readonly?: boolean
 }
 
-export function VariantsMatrix({ variantAttrs, variants, onChange, currency, readonly }: Props) {
+export function VariantsMatrix({
+  tenantSlug,
+  productName,
+  variantAttrs,
+  variants,
+  onChange,
+  currency,
+  readonly,
+}: Props) {
+  const [movementVariant, setMovementVariant] = useState<VariantRow | null>(null)
+
   function update(idx: number, patch: Partial<VariantRow>) {
     onChange(variants.map((v, i) => (i === idx ? { ...v, ...patch } : v)))
   }
@@ -34,8 +50,12 @@ export function VariantsMatrix({ variantAttrs, variants, onChange, currency, rea
     onChange(variants.map((v) => ({ ...v, price: value })))
   }
 
+  /**
+   * Bulk-stock only fills in *new* rows. Existing variants must use the
+   * movement dialog so the audit log stays accurate.
+   */
   function bulkStock(value: string) {
-    onChange(variants.map((v) => ({ ...v, stock: value })))
+    onChange(variants.map((v) => (v.id ? v : { ...v, stock: value })))
   }
 
   function toggleStatus(idx: number) {
@@ -55,20 +75,28 @@ export function VariantsMatrix({ variantAttrs, variants, onChange, currency, rea
   }
 
   const isSimple = variantAttrs.length === 0
-  const newCount = variants.filter((v) => v.isNew).length
+  const newCount = variants.filter((v) => !v.id).length
 
   return (
     <div className="flex flex-col gap-3">
       {newCount > 0 ? (
         <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-foreground">
           <Badge variant="default">{newCount}</Badge>
-          <span>variantes nuevas se crearán al guardar.</span>
+          <span>variante{newCount === 1 ? "" : "s"} nueva{newCount === 1 ? "" : "s"} se crearán al guardar.</span>
         </div>
       ) : null}
 
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+        El stock de variantes existentes se modifica registrando un movimiento (entrada, salida o
+        ajuste) para mantener la trazabilidad. El campo de stock en la grilla solo se usa para fijar el
+        stock <em>inicial</em> de variantes recién creadas.
+      </div>
+
       {!readonly ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/40 p-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Aplicar a todas</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Aplicar a todas
+          </span>
           <Input
             type="number"
             placeholder="Precio"
@@ -79,8 +107,8 @@ export function VariantsMatrix({ variantAttrs, variants, onChange, currency, rea
           />
           <Input
             type="number"
-            placeholder="Stock"
-            className="h-8 w-24"
+            placeholder="Stock inicial (sólo nuevas)"
+            className="h-8 w-44"
             min={0}
             step={1}
             onChange={(e) => bulkStock(e.target.value)}
@@ -123,9 +151,10 @@ export function VariantsMatrix({ variantAttrs, variants, onChange, currency, rea
           <tbody>
             {variants.map((v, idx) => {
               const archived = v.status === "archived"
+              const isExisting = !!v.id
               return (
                 <tr
-                  key={Object.values(v.attributes).join("·") + idx}
+                  key={(v.id ?? "new") + Object.values(v.attributes).join("·") + idx}
                   className={archived ? "border-b border-border opacity-60" : "border-b border-border"}
                 >
                   {!isSimple ? (
@@ -158,15 +187,36 @@ export function VariantsMatrix({ variantAttrs, variants, onChange, currency, rea
                     />
                   </td>
                   <td className="px-2 py-1.5">
-                    <Input
-                      type="number"
-                      value={v.stock}
-                      onChange={(e) => update(idx, { stock: e.target.value })}
-                      className="h-8 w-20"
-                      min={0}
-                      step={1}
-                      disabled={readonly}
-                    />
+                    {isExisting ? (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-8 min-w-[3rem] items-center rounded-md border border-border bg-muted/30 px-2 font-mono text-sm tabular-nums">
+                          {v.stock}
+                        </span>
+                        {!readonly ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => setMovementVariant(v)}
+                            aria-label="Registrar movimiento"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <Input
+                        type="number"
+                        value={v.stock}
+                        onChange={(e) => update(idx, { stock: e.target.value })}
+                        className="h-8 w-20"
+                        min={0}
+                        step={1}
+                        placeholder="0"
+                        disabled={readonly}
+                      />
+                    )}
                   </td>
                   <td className="px-3 py-1.5 text-right">
                     {!readonly ? (
@@ -193,6 +243,31 @@ export function VariantsMatrix({ variantAttrs, variants, onChange, currency, rea
       </div>
 
       <p className="text-xs text-muted-foreground">{variants.length} variantes en total.</p>
+
+      {movementVariant && movementVariant.id ? (
+        <StockMovementDialog
+          tenantSlug={tenantSlug}
+          open={!!movementVariant}
+          onOpenChange={(o) => {
+            if (!o) setMovementVariant(null)
+          }}
+          variant={{
+            id: movementVariant.id,
+            sku: movementVariant.sku || null,
+            attributes: movementVariant.attributes,
+            stock: Number(movementVariant.stock) || 0,
+            productName,
+          }}
+          onSuccess={(newStock) => {
+            // Reflect the new stock immediately in the matrix without a full reload.
+            onChange(
+              variants.map((v) =>
+                v.id === movementVariant.id ? { ...v, stock: String(newStock) } : v,
+              ),
+            )
+          }}
+        />
+      ) : null}
     </div>
   )
 }
