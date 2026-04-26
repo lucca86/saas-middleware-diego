@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Plus, Settings2 } from "lucide-react"
+import { Plus, Settings2, Upload } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { listCategories, listProducts, listProductTypes, productCounts } from "@/lib/products/queries"
 import { Button } from "@/components/ui/button"
@@ -54,12 +54,20 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
               </Link>
             </Button>
             {canEdit ? (
-              <Button asChild size="sm" className="shadow-signal">
-                <Link href={`/app/${slug}/products/new`}>
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Nuevo producto
-                </Link>
-              </Button>
+              <>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/app/${slug}/products/import`}>
+                    <Upload className="mr-1.5 h-4 w-4" />
+                    Importar CSV
+                  </Link>
+                </Button>
+                <Button asChild size="sm" className="shadow-signal">
+                  <Link href={`/app/${slug}/products/new`}>
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Nuevo producto
+                  </Link>
+                </Button>
+              </>
             ) : null}
           </div>
         </div>

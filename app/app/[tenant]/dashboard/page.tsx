@@ -1,7 +1,34 @@
-import { Activity, ShoppingCart, Store, Zap } from "lucide-react"
+import Link from "next/link"
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Boxes,
+  ExternalLink,
+  Globe,
+  Package,
+  Settings2,
+  TrendingUp,
+} from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
+import {
+  getDashboardSummary,
+  getLowStockVariants,
+  getRecentMovements,
+} from "@/lib/dashboard/queries"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 
 export const metadata = { title: "Dashboard" }
+
+const ARS = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 0,
+})
+const NUM = new Intl.NumberFormat("es-AR")
 
 export default async function DashboardPage({
   params,
@@ -11,89 +38,309 @@ export default async function DashboardPage({
   const { tenant: slug } = await params
   const { tenant } = await requireTenant(slug)
 
+  const [summary, lowStock, movements] = await Promise.all([
+    getDashboardSummary(tenant.id),
+    getLowStockVariants(tenant.id, 10),
+    getRecentMovements(tenant.id, 10),
+  ])
+
+  const base = `/app/${slug}`
+
   return (
-    <div className="mx-auto max-w-7xl">
-      <div className="mb-10">
-        <div className="flex items-center gap-2 font-sans text-xs uppercase tracking-[0.18em] text-primary">
-          <Activity className="h-3 w-3" />
-          System Pulse · Stable
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 font-sans text-xs uppercase tracking-[0.18em] text-primary">
+            <TrendingUp className="h-3 w-3" />
+            Panel principal
+          </div>
+          <h1 className="mt-3 font-display text-3xl font-extrabold leading-tight tracking-tight">
+            {tenant.name}
+          </h1>
+          <p className="mt-1 font-sans text-sm text-muted-foreground">
+            Estado del catálogo, stock y storefront en tiempo real.
+          </p>
         </div>
-        <h1 className="mt-3 font-display text-5xl font-extrabold leading-[1.05] tracking-tight text-balance">
-          Connectivity Overview
-        </h1>
-        <p className="mt-3 max-w-2xl font-sans text-sm leading-relaxed text-muted-foreground">
-          {`Monitoreo de sincronización global entre tus canales y el ERP de ${tenant.name}.`}
-        </p>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`${base}/products/new`}>
+              <Package className="mr-1.5 h-4 w-4" />
+              Nuevo producto
+            </Link>
+          </Button>
+          {summary.storefrontPublished ? (
+            <Button asChild size="sm">
+              <Link href={`/s/${slug}`} target="_blank" rel="noopener noreferrer">
+                <Globe className="mr-1.5 h-4 w-4" />
+                Ver storefront
+                <ExternalLink className="ml-1.5 h-3 w-3" />
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild size="sm">
+              <Link href={`${base}/storefront`}>
+                <Globe className="mr-1.5 h-4 w-4" />
+                Publicar storefront
+              </Link>
+            </Button>
+          )}
+        </div>
+      </header>
+
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Kpi
+          label="Productos activos"
+          value={NUM.format(summary.productsActive)}
+          hint={
+            summary.productsDraft > 0
+              ? `${summary.productsDraft} en borrador`
+              : "Listos para vender"
+          }
+          icon={Package}
+          accent="primary"
+        />
+        <Kpi
+          label="Unidades en stock"
+          value={NUM.format(summary.unitsOnHand)}
+          hint={`${NUM.format(summary.variantsTotal)} variantes activas`}
+          icon={Boxes}
+          accent="primary"
+        />
+        <Kpi
+          label="Valor de inventario"
+          value={summary.inventoryValue > 0 ? ARS.format(summary.inventoryValue) : "—"}
+          hint="Calculado al costo cargado"
+          icon={TrendingUp}
+          accent="tertiary"
+        />
+        <Kpi
+          label="Movimientos (7d)"
+          value={NUM.format(summary.movements7d)}
+          hint="Auditados y trazables"
+          icon={Settings2}
+          accent="tertiary"
+        />
+      </section>
+
+      {summary.outOfStockCount + summary.lowStockCount > 0 ? (
+        <section className="rounded-lg border border-warning/30 bg-warning/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
+            <div className="flex-1">
+              <h2 className="font-display text-base font-semibold">Atención</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {summary.outOfStockCount > 0 ? (
+                  <>
+                    <strong className="text-foreground">{summary.outOfStockCount}</strong> variante
+                    {summary.outOfStockCount === 1 ? "" : "s"} sin stock.{" "}
+                  </>
+                ) : null}
+                {summary.lowStockCount > 0 ? (
+                  <>
+                    <strong className="text-foreground">{summary.lowStockCount}</strong> con stock
+                    bajo (≤ 5 unidades).
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`${base}/stock`}>Ver detalle</Link>
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardContent className="p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-semibold">Stock bajo</h2>
+                <p className="text-xs text-muted-foreground">
+                  Variantes con 5 unidades o menos.
+                </p>
+              </div>
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`${base}/stock`}>Ver todo</Link>
+              </Button>
+            </div>
+            {lowStock.length === 0 ? (
+              <Empty className="border-none">
+                <EmptyMedia>
+                  <Boxes className="h-8 w-8 text-muted-foreground" />
+                </EmptyMedia>
+                <EmptyTitle>Todo bajo control</EmptyTitle>
+                <EmptyDescription>Ninguna variante necesita reposición.</EmptyDescription>
+              </Empty>
+            ) : (
+              <ul className="divide-y divide-border">
+                {lowStock.map((row) => {
+                  const attrs = Object.values(row.attributes).filter(Boolean).join(" · ")
+                  const isOut = row.stock <= 0
+                  return (
+                    <li key={row.variant_id} className="flex items-center gap-3 py-2.5">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                        {row.primary_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={row.primary_image_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`${base}/products/${row.product_id}`}
+                          className="block truncate text-sm font-medium hover:underline"
+                        >
+                          {row.product_name}
+                        </Link>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {attrs || "Sin variante"}
+                        </div>
+                      </div>
+                      <Badge
+                        className={
+                          isOut
+                            ? "border-destructive/40 bg-destructive/15 text-destructive"
+                            : "border-warning/40 bg-warning/15 text-warning"
+                        }
+                      >
+                        {isOut ? "Sin stock" : `${row.stock} u.`}
+                      </Badge>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-semibold">Movimientos recientes</h2>
+                <p className="text-xs text-muted-foreground">
+                  Últimos cambios de stock auditados.
+                </p>
+              </div>
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`${base}/stock`}>Ver todo</Link>
+              </Button>
+            </div>
+            {movements.length === 0 ? (
+              <Empty className="border-none">
+                <EmptyMedia>
+                  <Settings2 className="h-8 w-8 text-muted-foreground" />
+                </EmptyMedia>
+                <EmptyTitle>Sin movimientos aún</EmptyTitle>
+                <EmptyDescription>
+                  Cuando registres entradas o salidas de stock van a aparecer acá.
+                </EmptyDescription>
+              </Empty>
+            ) : (
+              <ul className="divide-y divide-border">
+                {movements.map((m) => {
+                  const attrs = Object.values(m.attributes).filter(Boolean).join(" · ")
+                  const positive = m.qty >= 0
+                  return (
+                    <li key={m.id} className="flex items-center gap-3 py-2.5">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+                          positive
+                            ? "bg-success/10 text-success"
+                            : "bg-destructive/10 text-destructive"
+                        }`}
+                      >
+                        {positive ? (
+                          <ArrowDownToLine className="h-4 w-4" />
+                        ) : (
+                          <ArrowUpFromLine className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm">
+                          <span className="font-medium">{m.product_name}</span>
+                          {attrs ? (
+                            <span className="text-muted-foreground"> · {attrs}</span>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {m.reason ?? labelForType(m.type)} ·{" "}
+                          {new Date(m.created_at).toLocaleString("es-AR", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
+                        </div>
+                      </div>
+                      <span
+                        className={`tabular-nums font-semibold ${
+                          positive ? "text-success" : "text-destructive"
+                        }`}
+                      >
+                        {positive ? "+" : ""}
+                        {m.qty}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-4">
-        <StatusCard icon={Activity} label="Health Score" value="98.4%" hint="+0.2% desde último ciclo" tone="primary" />
-        <StatusCard icon={ShoppingCart} label="WooCommerce" value="Active" hint="Last sync · nunca" tone="primary" />
-        <StatusCard icon={Store} label="Storefront" value="Ready" hint="Publicá tu catálogo" tone="tertiary" />
-        <StatusCard icon={Zap} label="Throughput" value="0 ops/s" hint="Esperando primer sync" tone="tertiary" />
-      </section>
-
-      <section className="mt-10 rounded-lg border border-border/60 bg-card p-8">
-        <h2 className="font-display text-2xl font-extrabold tracking-tight">
-          Bienvenido a {tenant.name}
-        </h2>
-        <p className="mt-2 max-w-2xl font-sans text-sm leading-relaxed text-muted-foreground">
-          Tu espacio está listo. En los próximos sprints vas a poder cargar productos con variantes,
-          publicar tu storefront, conectar WooCommerce y ver el motor de sync en vivo. Por ahora,
-          este dashboard es una cabecera técnica que vamos a llenar con señales reales.
-        </p>
-        <div className="mt-6 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-4 py-3">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-signal" aria-hidden="true" />
-          <span className="font-sans text-xs uppercase tracking-[0.14em] text-primary">
-            Sprint 1 · Fundación completada
-          </span>
-        </div>
-      </section>
     </div>
   )
 }
 
-function StatusCard({
-  icon: Icon,
+function labelForType(type: "initial" | "in" | "out" | "adjustment") {
+  switch (type) {
+    case "initial":
+      return "Stock inicial"
+    case "in":
+      return "Entrada"
+    case "out":
+      return "Salida"
+    case "adjustment":
+      return "Ajuste"
+  }
+}
+
+function Kpi({
   label,
   value,
   hint,
-  tone,
+  icon: Icon,
+  accent,
 }: {
-  icon: React.ComponentType<{ className?: string }>
   label: string
   value: string
   hint: string
-  tone: "primary" | "tertiary"
+  icon: React.ComponentType<{ className?: string }>
+  accent: "primary" | "tertiary"
 }) {
   return (
-    <div
-      className={`rounded-lg border border-border/60 bg-card p-5 ${
-        tone === "primary" ? "card-accent-primary" : "card-accent-tertiary"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-md ${
-            tone === "primary" ? "bg-primary/10 text-primary" : "bg-tertiary/10 text-tertiary"
-          }`}
-        >
-          <Icon className="h-4 w-4" />
+    <Card className={accent === "primary" ? "card-accent-primary" : "card-accent-tertiary"}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between">
+          <span
+            className={`flex h-9 w-9 items-center justify-center rounded-md ${
+              accent === "primary" ? "bg-primary/10 text-primary" : "bg-tertiary/10 text-tertiary"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {label}
+          </span>
         </div>
-        <span
-          className={`rounded-sm border px-2 py-0.5 font-sans text-[10px] uppercase tracking-[0.14em] ${
-            tone === "primary"
-              ? "border-primary/20 bg-primary/5 text-primary"
-              : "border-tertiary/20 bg-tertiary/5 text-tertiary"
-          }`}
-        >
-          {label}
-        </span>
-      </div>
-      <p className="mt-6 font-display text-4xl font-extrabold tracking-tight text-foreground">
-        {value}
-      </p>
-      <p className="mt-1 font-sans text-xs text-muted-foreground">{hint}</p>
-    </div>
+        <div className="mt-4 font-display text-3xl font-extrabold tabular-nums tracking-tight">
+          {value}
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+      </CardContent>
+    </Card>
   )
 }

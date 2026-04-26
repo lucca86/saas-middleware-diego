@@ -14,6 +14,7 @@ import {
   ScrollText,
   Settings,
   Share2,
+  ShieldCheck,
   Sparkles,
   Store,
   Tag,
@@ -27,9 +28,10 @@ import { TenantSwitcher, type TenantOption } from "@/components/app/tenant-switc
 interface AppSidebarProps {
   current: TenantOption
   tenants: TenantOption[]
+  isPlatformAdmin?: boolean
 }
 
-export function AppSidebar({ current, tenants }: AppSidebarProps) {
+export function AppSidebar({ current, tenants, isPlatformAdmin = false }: AppSidebarProps) {
   const pathname = usePathname()
   const base = `/app/${current.slug}`
 
@@ -83,6 +85,18 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
           })}
         </ul>
       </nav>
+
+      {isPlatformAdmin ? (
+        <div className="mx-3 mb-2 mt-1">
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/15"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+            Panel de plataforma
+          </Link>
+        </div>
+      ) : null}
 
       <div className="border-t border-sidebar-border p-4">
         <Button
