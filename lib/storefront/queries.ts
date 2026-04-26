@@ -1,6 +1,7 @@
 import "server-only"
 import { cache } from "react"
 import { createPublicClient } from "@/lib/supabase/public"
+import { imageProxyUrl } from "@/lib/r2/image-url"
 import type {
   ProductAttributesData,
   ProductVariant,
@@ -55,7 +56,7 @@ export async function listPublicProducts(
       product_types!products_type_id_fkey(name),
       categories!products_category_id_fkey(id, name, slug),
       product_variants(price, stock, status),
-      product_images(url, position, is_primary)
+      product_images(storage_key, url, position, is_primary)
       `,
     )
     .eq("tenant_id", tenantId)
@@ -82,6 +83,7 @@ export async function listPublicProducts(
     const prices = active.map((v) => Number(v.price)).filter((n) => !Number.isNaN(n))
     const totalStock = active.reduce((acc, v) => acc + (v.stock ?? 0), 0)
     const images = (p.product_images ?? []) as Array<{
+      storage_key: string
       url: string
       position: number
       is_primary: boolean
@@ -102,7 +104,7 @@ export async function listPublicProducts(
       min_price: prices.length > 0 ? Math.min(...prices) : null,
       max_price: prices.length > 0 ? Math.max(...prices) : null,
       has_stock: totalStock > 0,
-      primary_image: primary?.url ?? null,
+      primary_image: imageProxyUrl(primary?.storage_key) ?? null,
       _category_slug: cat?.slug ?? null,
     } as PublicProductCard & { _category_slug: string | null }
   })
@@ -185,7 +187,7 @@ export async function getPublicProductBySlug(
       .order("position", { ascending: true }),
     supabase
       .from("product_images")
-      .select("url, alt, position, is_primary")
+      .select("storage_key, url, alt, position, is_primary")
       .eq("product_id", product.id)
       .order("is_primary", { ascending: false })
       .order("position", { ascending: true }),
@@ -205,7 +207,21 @@ export async function getPublicProductBySlug(
       category_name: cat?.name ?? null,
     },
     variants: (variants ?? []) as ProductVariant[],
-    images: (images ?? []) as PublicProductImage[],
+    images: ((images ?? []) as Array<{
+      storage_key: string
+      url: string
+      alt: string | null
+      position: number
+      is_primary: boolean
+    }>).map(
+      (i) =>
+        ({
+          url: imageProxyUrl(i.storage_key) ?? i.url,
+          alt: i.alt,
+          position: i.position,
+          is_primary: i.is_primary,
+        }) satisfies PublicProductImage,
+    ),
   }
 }
 

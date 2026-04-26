@@ -1,5 +1,6 @@
 import "server-only"
 import { createClient } from "@/lib/supabase/server"
+import { imageProxyUrl } from "@/lib/r2/image-url"
 import type {
   StockMovement,
   StockMovementType,
@@ -98,7 +99,7 @@ export async function listVariantStock(tenantId: string): Promise<VariantStockRo
     .select(
       `
       id, product_id, sku, attributes, stock, status,
-      products:product_id ( name, slug, status, product_images ( url, is_primary, position ) )
+      products:product_id ( name, slug, status, product_images ( storage_key, url, is_primary, position ) )
       `,
     )
     .eq("tenant_id", tenantId)
@@ -112,6 +113,7 @@ export async function listVariantStock(tenantId: string): Promise<VariantStockRo
       const p = Array.isArray(row.products) ? row.products[0] : row.products
       if (!p) return null
       const images = (p.product_images ?? []) as Array<{
+        storage_key: string
         url: string
         is_primary: boolean
         position: number
@@ -129,7 +131,7 @@ export async function listVariantStock(tenantId: string): Promise<VariantStockRo
         variant_attributes: (row.attributes ?? {}) as Record<string, string>,
         stock: row.stock ?? 0,
         status: row.status as "active" | "archived",
-        primary_image_url: primary?.url ?? null,
+        primary_image_url: imageProxyUrl(primary?.storage_key) ?? null,
       } satisfies VariantStockRow
     })
     .filter((r): r is VariantStockRow => r !== null)

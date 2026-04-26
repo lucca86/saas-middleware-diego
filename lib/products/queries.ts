@@ -1,5 +1,6 @@
 import "server-only"
 import { createClient } from "@/lib/supabase/server"
+import { imageProxyUrl } from "@/lib/r2/image-url"
 import type {
   AttributeDef,
   Category,
@@ -96,7 +97,7 @@ export async function listProducts(
       product_types!products_type_id_fkey(name),
       categories!products_category_id_fkey(name),
       product_variants(id, price, stock),
-      product_images(url, is_primary, position)
+      product_images(storage_key, url, is_primary, position)
       `,
     )
     .eq("tenant_id", tenantId)
@@ -124,7 +125,12 @@ export async function listProducts(
     const ptype = Array.isArray(p.product_types) ? p.product_types[0] : p.product_types
     const cat = Array.isArray(p.categories) ? p.categories[0] : p.categories
     const prices = variants.map((v) => Number(v.price)).filter((n) => !Number.isNaN(n))
-    const images = (p.product_images ?? []) as Array<{ url: string; is_primary: boolean; position: number }>
+    const images = (p.product_images ?? []) as Array<{
+      storage_key: string
+      url: string
+      is_primary: boolean
+      position: number
+    }>
     const primary =
       images.find((i) => i.is_primary) ??
       [...images].sort((a, b) => a.position - b.position)[0] ??
@@ -149,7 +155,7 @@ export async function listProducts(
       min_price: prices.length > 0 ? Math.min(...prices) : null,
       type_name: ptype?.name ?? null,
       category_name: cat?.name ?? null,
-      primary_image_url: primary?.url ?? null,
+      primary_image_url: imageProxyUrl(primary?.storage_key) ?? null,
     } as ProductWithCounts
   })
 }

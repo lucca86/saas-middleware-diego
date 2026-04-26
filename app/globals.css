@@ -274,4 +274,39 @@
   .card-accent-destructive {
     @apply border-l-2 border-l-destructive;
   }
+
+  /* Manual / help center body styles. Scoped to .prose-manual so it never
+     leaks into product UI. Mirrors typographic defaults expected on a doc
+     page (paragraphs, headings, lists, inline code) without pulling a heavy
+     dependency like @tailwindcss/typography. */
+  .prose-manual {
+    @apply text-[15px] leading-relaxed text-foreground;
+  }
+  .prose-manual p {
+    @apply my-4;
+  }
+  .prose-manual h2 {
+    @apply mt-8 mb-3 font-display text-xl font-bold text-foreground;
+  }
+  .prose-manual h3 {
+    @apply mt-6 mb-2 font-display text-base font-semibold text-foreground;
+  }
+  .prose-manual ul {
+    @apply my-3 list-disc space-y-1.5 pl-5;
+  }
+  .prose-manual ol {
+    @apply my-3 list-decimal space-y-1.5 pl-5;
+  }
+  .prose-manual code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[13px] text-foreground/90;
+  }
+  .prose-manual a {
+    @apply font-medium text-primary underline-offset-4 hover:underline;
+  }
+  .prose-manual strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose-manual table {
+    @apply my-4;
+  }
 }

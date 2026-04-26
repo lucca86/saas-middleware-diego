@@ -1,5 +1,6 @@
 import "server-only"
 import { createClient } from "@/lib/supabase/server"
+import { imageProxyUrl } from "@/lib/r2/image-url"
 
 export interface ProductImage {
   id: string
@@ -33,5 +34,10 @@ export async function listProductImages(
     .order("position", { ascending: true })
 
   if (error) throw error
-  return (data ?? []) as ProductImage[]
+  // Rewrite each row's url to go through our same-origin image proxy. The
+  // original R2 URL stays in the database for traceability/debugging.
+  return ((data ?? []) as ProductImage[]).map((row) => ({
+    ...row,
+    url: imageProxyUrl(row.storage_key) ?? row.url,
+  }))
 }

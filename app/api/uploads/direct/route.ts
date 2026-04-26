@@ -6,6 +6,7 @@ import {
   ALLOWED_IMAGE_TYPES,
   MAX_UPLOAD_BYTES,
 } from "@/lib/r2/client"
+import { imageProxyUrl } from "@/lib/r2/image-url"
 
 // Allow large multipart bodies up to MAX_UPLOAD_BYTES (10 MB).
 export const runtime = "nodejs"
@@ -129,7 +130,9 @@ export async function POST(req: Request) {
   return NextResponse.json({
     id: row.id,
     storageKey: upload.storageKey,
-    url: upload.publicUrl,
+    // Always return the same-origin proxy URL so the client never has to
+    // hit R2 directly (which would trigger CORS).
+    url: imageProxyUrl(upload.storageKey) ?? upload.publicUrl,
     width: Number.isFinite(width) && width ? width : null,
     height: Number.isFinite(height) && height ? height : null,
     sizeBytes: file.size,

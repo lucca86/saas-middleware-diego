@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
+  BookOpen,
   Boxes,
   LayoutDashboard,
   Layers,
@@ -44,6 +45,7 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
     { href: `${base}/sync`, label: "Sync Logs", icon: ScrollText },
     { href: `${base}/rules`, label: "Reglas", icon: Sparkles },
     { href: `${base}/analytics`, label: "Analytics", icon: BarChart3 },
+    { href: `${base}/manual`, label: "Manual", icon: BookOpen },
     { href: `${base}/settings`, label: "Settings", icon: Settings },
   ] as const
 
@@ -83,12 +85,23 @@ export function AppSidebar({ current, tenants }: AppSidebarProps) {
       </nav>
 
       <div className="border-t border-sidebar-border p-4">
-        <Button asChild size="sm" className="w-full shadow-signal">
+        <Button
+          asChild
+          size="sm"
+          className="w-full shadow-signal"
+          title="Conectar un nuevo canal de venta (storefront, marketplace, feed)."
+        >
           <Link href={`${base}/channels/new`}>
             <Plus className="mr-2 h-4 w-4" />
             Deploy New Node
           </Link>
         </Button>
+        <Link
+          href={`${base}/manual/canales-y-deploy-new-node`}
+          className="mt-2 block text-center font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground"
+        >
+          ¿Qué es un node?
+        </Link>
       </div>
     </aside>
   )
