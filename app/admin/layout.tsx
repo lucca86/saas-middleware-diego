@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
+import { SignOutButton } from "@/components/auth/sign-out-button"
 import { isPlatformAdmin } from "@/lib/platform/auth"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/server"
@@ -37,11 +38,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               {user.email}
             </Badge>
             <Link
-              href="/"
+              href="/select-tenant"
               className="text-xs font-medium text-muted-foreground hover:text-foreground"
             >
               Volver a la app
             </Link>
+            <SignOutButton />
           </div>
         </div>
       </header>
