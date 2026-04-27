@@ -70,7 +70,7 @@ export default async function SelectTenantPage({
         {denied ? (
           <div className="mb-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
             <p className="font-sans text-sm text-destructive">
-              No tenés acceso al espacio <span className="font-mono">{denied}</span>.
+              No tenés acceso a ese espacio. Elegí uno de los disponibles para tu cuenta.
             </p>
           </div>
         ) : null}

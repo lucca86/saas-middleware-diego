@@ -48,7 +48,10 @@ export const requireTenant = cache(async (slug: string): Promise<TenantContext> 
     .maybeSingle()
 
   if (error || !data) {
-    redirect(`/select-tenant?denied=${slug}`)
+    // Don't echo the slug back: the user just tried to reach a tenant they
+    // don't belong to, and exposing arbitrary slugs would leak info about
+    // other tenants. A generic flag is enough for the UI.
+    redirect(`/select-tenant?denied=1`)
   }
 
   const t = Array.isArray(data.tenants) ? data.tenants[0] : data.tenants

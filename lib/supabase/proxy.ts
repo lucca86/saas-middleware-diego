@@ -79,7 +79,8 @@ export async function updateSession(request: NextRequest) {
       if (!membership) {
         const url = request.nextUrl.clone()
         url.pathname = "/select-tenant"
-        url.searchParams.set("denied", tenantSlug)
+        // Generic flag — never echo the slug, see lib/tenant/context.ts.
+        url.searchParams.set("denied", "1")
         return NextResponse.redirect(url)
       }
 
