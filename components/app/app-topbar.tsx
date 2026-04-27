@@ -1,5 +1,6 @@
 import { Bell, HelpCircle, Search } from "lucide-react"
 import { UserMenu } from "@/components/app/user-menu"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface AppTopbarProps {
   tenantSlug: string
@@ -34,6 +35,7 @@ export function AppTopbar({ tenantSlug, fullName, email, avatarUrl }: AppTopbarP
         >
           <HelpCircle className="h-4 w-4" />
         </button>
+        <ThemeToggle />
         <div className="ml-2 h-6 w-px bg-border" aria-hidden="true" />
         <UserMenu
           tenantSlug={tenantSlug}

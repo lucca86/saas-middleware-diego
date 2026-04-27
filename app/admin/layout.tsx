@@ -3,6 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { isPlatformAdmin } from "@/lib/platform/auth"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/server"
@@ -43,6 +44,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             >
               Volver a la app
             </Link>
+            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>

@@ -44,7 +44,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning className={`${manrope.variable} ${inter.variable}`}>
       <body className="bg-background text-foreground font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           {children}
           <Toaster position="top-right" />
         </ThemeProvider>
