@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { Copy, Plus, ShieldCheck, ShieldOff, Trash2, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import {
+  addTenantMembership,
   createTestUser,
   deleteUser,
   removeTenantMembership,
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -115,7 +117,7 @@ export function AdminUsersClient({
             </TableHeader>
             <TableBody>
               {filtered.map((u) => (
-                <UserRow key={u.id} user={u} />
+                <UserRow key={u.id} user={u} tenants={tenants} />
               ))}
               {filtered.length === 0 ? (
                 <TableRow>
@@ -132,8 +134,13 @@ export function AdminUsersClient({
   )
 }
 
-function UserRow({ user }: { user: PlatformUser }) {
+function UserRow({ user, tenants }: { user: PlatformUser; tenants: Tenant[] }) {
   const [pending, start] = useTransition()
+  // Tenants the user is NOT yet a member of — eligible for assignment.
+  const availableTenants = useMemo(() => {
+    const joined = new Set(user.memberships.map((m) => m.tenant_id))
+    return tenants.filter((t) => !joined.has(t.id))
+  }, [tenants, user.memberships])
 
   function handleTogglePlatform() {
     start(async () => {
@@ -174,37 +181,37 @@ function UserRow({ user }: { user: PlatformUser }) {
         )}
       </TableCell>
       <TableCell>
-        {user.memberships.length === 0 ? (
-          <span className="text-xs text-muted-foreground">Sin tenants</span>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {user.memberships.map((m) => {
+        <div className="flex flex-wrap items-center gap-1.5">
+          {user.memberships.length === 0 ? (
+            <span className="text-xs text-muted-foreground">Sin tenants</span>
+          ) : (
+            user.memberships.map((m) => {
               const role = m.role as TenantRoleName
               return (
-                <li key={`${m.tenant_id}-${m.role}`}>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMembership(m.tenant_id)}
-                    disabled={pending}
-                    className={`group inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
-                      ROLE_VARIANT[role] ?? ROLE_VARIANT.viewer
-                    }`}
-                    title="Click para remover"
-                  >
-                    <span className="font-mono">/{m.tenant_slug}</span>
-                    <span className="opacity-70">· {ROLE_LABEL[role] ?? m.role}</span>
-                    <Trash2 className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                  </button>
-                </li>
+                <button
+                  key={`${m.tenant_id}-${m.role}`}
+                  type="button"
+                  onClick={() => handleRemoveMembership(m.tenant_id)}
+                  disabled={pending}
+                  className={`group inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+                    ROLE_VARIANT[role] ?? ROLE_VARIANT.viewer
+                  }`}
+                  title="Click para remover"
+                >
+                  <span className="font-mono">/{m.tenant_slug}</span>
+                  <span className="opacity-70">· {ROLE_LABEL[role] ?? m.role}</span>
+                  <Trash2 className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
               )
-            })}
-          </ul>
-        )}
+            })
+          )}
+          {availableTenants.length > 0 ? (
+            <AssignTenantPopover userId={user.id} tenants={availableTenants} />
+          ) : null}
+        </div>
       </TableCell>
       <TableCell className="text-xs text-muted-foreground">
-        {user.last_sign_in_at
-          ? new Date(user.last_sign_in_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })
-          : "Nunca"}
+        <ClientDate iso={user.last_sign_in_at} />
       </TableCell>
       <TableCell>
         <div className="flex items-center justify-end gap-1">
@@ -410,5 +417,120 @@ function CreateTestUserDialog({ tenants }: { tenants: Tenant[] }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Renders a date using the user's local timezone. To avoid hydration
+ * mismatches between server (UTC) and client locales, we render a stable
+ * placeholder on the first paint and swap to the localized string after
+ * mount. This matches React's hydration model and keeps SSR deterministic.
+ */
+function ClientDate({ iso }: { iso: string | null }) {
+  const [text, setText] = useState<string>(iso ? "…" : "Nunca")
+  useEffect(() => {
+    if (!iso) return
+    setText(
+      new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }),
+    )
+  }, [iso])
+  return <span suppressHydrationWarning>{text}</span>
+}
+
+/**
+ * Inline popover used when an existing user has no membership in a tenant
+ * (or only some). Lets a platform admin pick a tenant + role and create the
+ * membership server-side via addTenantMembership(). The trigger is a small
+ * "+ Asignar" pill that lives next to the existing role badges.
+ */
+function AssignTenantPopover({
+  userId,
+  tenants,
+}: {
+  userId: string
+  tenants: Tenant[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [tenantId, setTenantId] = useState<string>(tenants[0]?.id ?? "")
+  const [role, setRole] = useState<TenantRoleName>("operator")
+  const [pending, start] = useTransition()
+
+  // Keep the selection in sync if the available tenants change while the
+  // popover is mounted (e.g. another row was just assigned).
+  useEffect(() => {
+    if (!tenantId || !tenants.find((t) => t.id === tenantId)) {
+      setTenantId(tenants[0]?.id ?? "")
+    }
+  }, [tenants, tenantId])
+
+  function handleSubmit() {
+    if (!tenantId) return
+    start(async () => {
+      const res = await addTenantMembership({ userId, tenantId, role })
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      toast.success("Tenant asignado")
+      setOpen(false)
+    })
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+          title="Asignar tenant"
+        >
+          <Plus className="h-3 w-3" />
+          Asignar
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor={`assign-tenant-${userId}`} className="text-xs">
+            Tenant
+          </Label>
+          <Select value={tenantId} onValueChange={setTenantId}>
+            <SelectTrigger id={`assign-tenant-${userId}`}>
+              <SelectValue placeholder="Elegí un tenant" />
+            </SelectTrigger>
+            <SelectContent>
+              {tenants.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  /{t.slug} · {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`assign-role-${userId}`} className="text-xs">
+            Rol en el tenant
+          </Label>
+          <Select value={role} onValueChange={(v) => setRole(v as TenantRoleName)}>
+            <SelectTrigger id={`assign-role-${userId}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="owner">Owner</SelectItem>
+              <SelectItem value="admin">Admin (tenant)</SelectItem>
+              <SelectItem value="operator">Operator</SelectItem>
+              <SelectItem value="viewer">Viewer</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={pending}>
+            Cancelar
+          </Button>
+          <Button type="button" size="sm" onClick={handleSubmit} disabled={pending || !tenantId}>
+            {pending ? "Asignando..." : "Asignar"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
