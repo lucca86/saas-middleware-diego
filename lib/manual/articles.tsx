@@ -507,16 +507,16 @@ const channels: ManualArticle = {
   slug: "canales-y-deploy-new-node",
   title: "Canales (Deploy New Node)",
   category: "intro",
-  summary: "Qué significa el botón &ldquo;Deploy New Node&rdquo; del sidebar y para qué sirve.",
-  keywords: ["nodo", "node", "deploy", "canal", "channel", "integracion"],
+  summary: "Qué significa &ldquo;Deploy New Node&rdquo; y cómo conectar Tienda Nube.",
+  keywords: ["nodo", "node", "deploy", "canal", "channel", "integracion", "tienda nube", "tiendanube", "oauth"],
   searchText:
-    "Deploy New Node es el botón para crear un canal. Un nodo o channel es un destino donde se publica el catálogo: storefront, marketplace, integración API. Pulpo es el hub central.",
+    "Deploy New Node es el botón para conectar un canal de venta. Tienda Nube se conecta vía OAuth: redirige al login de TN, autoriza la app, y vuelve con un access token guardado en sales_channels. Cada canal es un node con sus credenciales y datos de la tienda.",
   content: () => (
     <>
       <p>
         En el sidebar hay un botón llamado <strong>Deploy New Node</strong>.
         Suena críptico la primera vez. La traducción literal es{" "}
-        <em>desplegar un nuevo nodo</em>, pero en el dominio de Pulpo significa{" "}
+        <em>desplegar un nuevo nodo</em>, pero en Stockcurve significa{" "}
         <strong>conectar un nuevo canal de venta</strong>.
       </p>
       <h2>Modelo mental</h2>
@@ -526,19 +526,38 @@ const channels: ManualArticle = {
       </p>
       <ul>
         <li>El <strong>storefront propio</strong> en <code>/s/&lt;slug&gt;</code>.</li>
-        <li>Un <strong>marketplace</strong> (Mercado Libre, TiendaNube) cuando exista la integración.</li>
-        <li>Un <strong>endpoint API</strong> de un partner.</li>
-        <li>Un <strong>feed de Instagram Shopping / Google Merchant</strong>.</li>
+        <li>Una tienda en <strong>Tienda Nube</strong> (disponible).</li>
+        <li><strong>Mercado Libre</strong>, <strong>Shopify</strong> y feeds (próximamente).</li>
       </ul>
-      <p>
-        El botón abre el flujo para crear y configurar uno nuevo. Por ahora el
-        canal estable es el storefront propio; los demás se van agregando.
-      </p>
-      <Callout variant="tip" title="¿Por qué la jerga?">
-        Pulpo está pensado como un <em>hub</em> de catálogo: el negocio es uno,
-        los lugares donde aparece son muchos. Llamarlos &ldquo;nodos&rdquo;
-        deja explícito que el origen de verdad es Pulpo y no cada canal.
+
+      <h2>Conectar Tienda Nube paso a paso</h2>
+      <StepList
+        steps={[
+          <>Andá a <strong>Canales → Deploy new node</strong> y elegí <em>Tienda Nube</em>.</>,
+          <>Hacé click en <strong>Conectar con Tienda Nube</strong>. Te redirigimos al login de TN.</>,
+          <>Iniciá sesión con la cuenta de la tienda y aprobá la instalación de la app.</>,
+          <>Tienda Nube te devuelve a Stockcurve y guardamos el <Kbd>access token</Kbd> + datos de la tienda en este tenant.</>,
+          <>En la página del node podés ver país, moneda, plan y permisos otorgados, y hacer <strong>Probar conexión</strong> para validar que el token sigue vivo.</>,
+        ]}
+      />
+
+      <Callout variant="info" title="¿Qué guardamos exactamente?">
+        El access token de Tienda Nube vive sólo en la base, en la columna <code>sales_channels.access_token</code>,
+        protegida por RLS para que sólo este tenant pueda usarla. La query pública del catálogo nunca lee esa columna.
       </Callout>
+
+      <Callout variant="warning" title="Seguridad del flujo OAuth">
+        Cuando hacés &ldquo;Conectar&rdquo; generamos un <em>state</em> aleatorio de 256 bits y lo guardamos contra
+        tu usuario y tu tenant. Si Tienda Nube nos devuelve un state que no coincide con uno vigente, abortamos
+        la instalación. Eso evita que alguien te haga clickear un link malicioso para vincular la app a otra tienda.
+      </Callout>
+
+      <h2>Desconectar / eliminar</h2>
+      <p>
+        Owner y admin pueden <strong>desconectar</strong> (borra el token, deja el canal histórico) o{" "}
+        <strong>eliminar</strong> (borra el registro entero). Operator puede ver y conectar pero no eliminar.
+        Para volver a usar un canal eliminado hay que reinstalar la app desde Tienda Nube.
+      </p>
     </>
   ),
 }
