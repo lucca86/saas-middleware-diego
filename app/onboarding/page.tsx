@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { isPlatformAdmin } from "@/lib/platform/auth"
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard"
 import { SignalLogo } from "@/components/brand/signal-logo"
 import { SignOutButton } from "@/components/auth/sign-out-button"
@@ -14,13 +15,11 @@ export default async function OnboardingPage() {
 
   if (!user) redirect("/auth/login")
 
-  const { data: memberships } = await supabase
-    .from("tenant_members")
-    .select("tenant_id")
-    .eq("user_id", user.id)
-    .limit(1)
-
-  if (memberships && memberships.length > 0) {
+  // Self-service tenant creation is disabled. Only platform admins can
+  // create tenants, and they do so from /admin/tenants. Anybody else who
+  // ends up here is bounced back to the dispatcher.
+  const platformAdmin = await isPlatformAdmin()
+  if (!platformAdmin) {
     redirect("/select-tenant")
   }
 

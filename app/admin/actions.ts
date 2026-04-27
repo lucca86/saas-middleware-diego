@@ -2,12 +2,99 @@
 
 import { revalidatePath } from "next/cache"
 import { requirePlatformAdmin } from "@/lib/platform/auth"
+import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 
 const TENANT_ROLES = ["owner", "admin", "operator", "viewer"] as const
 export type TenantRoleName = (typeof TENANT_ROLES)[number]
 
 type Result = { ok: true; userId?: string; email?: string } | { ok: false; error: string }
+
+/**
+ * Slugify helper used on tenant creation. Lowercases, strips accents, replaces
+ * non-alphanumerics with dashes, collapses repeats. Must match the URL shape
+ * expected by `/app/[tenant]/...` routes.
+ */
+function slugify(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+}
+
+/**
+ * Platform-admin only: create a new tenant + assign an owner. We use the
+ * service role so we can (a) bypass tenant RLS and (b) atomically insert
+ * both the tenant and its initial membership without depending on the
+ * caller already being a member. The chosen owner becomes the only person
+ * with access until more memberships are added from /admin/users.
+ */
+export async function createTenant(input: {
+  name: string
+  slug?: string
+  ownerUserId?: string
+  businessType?: string
+}): Promise<{ ok: true; slug: string } | { ok: false; error: string }> {
+  await requirePlatformAdmin()
+
+  const name = input.name.trim()
+  if (name.length < 2) return { ok: false, error: "El nombre es muy corto" }
+
+  const slug = (input.slug?.trim() ? slugify(input.slug) : slugify(name)) || ""
+  if (slug.length < 2) return { ok: false, error: "Slug inválido" }
+
+  const svc = createServiceClient()
+
+  // Reject duplicate slugs explicitly so we can return a friendly error
+  // instead of a generic 23505.
+  const { data: existing } = await svc
+    .from("tenants")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle()
+  if (existing) return { ok: false, error: `El slug "${slug}" ya está en uso` }
+
+  // Default the owner to the current platform admin if none is provided —
+  // that way the tenant is reachable from the same session.
+  let ownerId = input.ownerUserId
+  if (!ownerId) {
+    const userClient = await createClient()
+    const { data } = await userClient.auth.getUser()
+    ownerId = data.user?.id
+  }
+  if (!ownerId) return { ok: false, error: "No se pudo determinar el owner" }
+
+  const { data: tenant, error: tErr } = await svc
+    .from("tenants")
+    .insert({
+      slug,
+      name,
+      business_type: input.businessType ?? null,
+      created_by: ownerId,
+    })
+    .select("id, slug")
+    .single()
+  if (tErr || !tenant) return { ok: false, error: tErr?.message ?? "No se pudo crear el tenant" }
+
+  const { error: mErr } = await svc.from("tenant_members").insert({
+    tenant_id: tenant.id,
+    user_id: ownerId,
+    role: "owner",
+  })
+  if (mErr) {
+    // Roll back the tenant if we couldn't seed the owner — a tenant with
+    // no members would be invisible to everyone.
+    await svc.from("tenants").delete().eq("id", tenant.id)
+    return { ok: false, error: `Tenant creado pero falló asignar owner: ${mErr.message}` }
+  }
+
+  revalidatePath("/admin")
+  revalidatePath("/admin/tenants")
+  return { ok: true, slug: tenant.slug }
+}
 
 export async function createTestUser(input: {
   email: string

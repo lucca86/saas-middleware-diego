@@ -1,14 +1,25 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ArrowRight, Building2, Plus } from "lucide-react"
+import { ArrowRight, Building2, ShieldCheck } from "lucide-react"
 import { listUserTenants } from "@/lib/tenant/context"
+import { isPlatformAdmin } from "@/lib/platform/auth"
 import { createClient } from "@/lib/supabase/server"
 import { SignalLogo } from "@/components/brand/signal-logo"
-import { Button } from "@/components/ui/button"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 
 export const metadata = { title: "Seleccionar espacio" }
 
+/**
+ * Post-login dispatcher.
+ *
+ * Routing rules:
+ *  - Platform admins → `/admin` (the global control panel).
+ *  - Users with exactly 1 tenant → `/app/<slug>/dashboard` (skip the picker).
+ *  - Users with 2+ tenants → render the picker below.
+ *  - Users with 0 tenants → show "waiting for assignment" state. There's no
+ *    self-service tenant creation: only platform admins can create tenants
+ *    from `/admin/tenants`.
+ */
 export default async function SelectTenantPage({
   searchParams,
 }: {
@@ -20,12 +31,20 @@ export default async function SelectTenantPage({
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
 
-  if (!user) {
-    redirect("/auth/login")
+  const [tenants, platformAdmin] = await Promise.all([listUserTenants(), isPlatformAdmin()])
+
+  // Platform admins get sent to the admin panel by default. They can still
+  // jump into a specific tenant from /admin/tenants.
+  if (platformAdmin && !denied) {
+    redirect("/admin")
   }
 
-  const tenants = await listUserTenants()
+  // Single-tenant users skip the picker entirely.
+  if (tenants.length === 1 && !denied) {
+    redirect(`/app/${tenants[0].slug}/dashboard`)
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -39,10 +58,12 @@ export default async function SelectTenantPage({
       <main className="mx-auto max-w-5xl px-6 py-16">
         <div className="mb-10">
           <h1 className="font-display text-4xl font-extrabold tracking-tight">
-            Elegí un espacio
+            {tenants.length === 0 ? "Tu cuenta está lista" : "Elegí un espacio"}
           </h1>
           <p className="mt-2 font-sans text-sm text-muted-foreground">
-            Cada espacio es un comercio con sus productos, canales y equipo.
+            {tenants.length === 0
+              ? "Esperá a que un administrador te asigne a un espacio para empezar."
+              : "Cada espacio es un comercio con sus productos, canales y equipo."}
           </p>
         </div>
 
@@ -60,17 +81,16 @@ export default async function SelectTenantPage({
               <Building2 className="h-6 w-6 text-primary" />
             </div>
             <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">
-              Todavía no tenés ningún espacio
+              Sin espacios asignados
             </h2>
-            <p className="mt-2 font-sans text-sm text-muted-foreground">
-              Creá tu primer comercio para empezar a sincronizar productos.
+            <p className="mx-auto mt-2 max-w-md font-sans text-sm text-muted-foreground">
+              Solo los administradores de la plataforma pueden crear espacios y asignarte. Si esperás
+              acceso a un comercio, pedile al admin que te invite desde su panel.
             </p>
-            <Button asChild className="mt-6 shadow-signal">
-              <Link href="/onboarding">
-                <Plus className="mr-2 h-4 w-4" />
-                Crear mi primer espacio
-              </Link>
-            </Button>
+            <p className="mx-auto mt-4 max-w-md font-sans text-xs text-muted-foreground">
+              Tu cuenta:{" "}
+              <span className="font-mono text-foreground">{user.email}</span>
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -94,13 +114,15 @@ export default async function SelectTenantPage({
                 <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
               </Link>
             ))}
-            <Link
-              href="/onboarding"
-              className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-card/40 p-5 font-sans text-sm text-muted-foreground transition hover:border-primary/40 hover:text-primary"
-            >
-              <Plus className="h-4 w-4" />
-              Crear otro espacio
-            </Link>
+            {platformAdmin ? (
+              <Link
+                href="/admin"
+                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-5 font-sans text-sm text-primary transition hover:border-primary/60"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Panel de plataforma
+              </Link>
+            ) : null}
           </div>
         )}
       </main>
