@@ -2,19 +2,28 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import type { LucideIcon } from "lucide-react"
+import { Building2, ShieldCheck, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type Item = { href: string; label: string; icon: LucideIcon }
+// Items live inside this client component on purpose. The layout that hosts
+// the nav is a server component, and React Server Components cannot serialize
+// function references (lucide icon components are functions) across the
+// boundary. Defining items here keeps the API a plain client tree.
+const ITEMS = [
+  { href: "/admin", label: "Resumen", icon: ShieldCheck },
+  { href: "/admin/tenants", label: "Tenants", icon: Building2 },
+  { href: "/admin/users", label: "Usuarios", icon: Users },
+] as const
 
-export function AdminNav({ items }: { items: readonly Item[] }) {
+export function AdminNav() {
   const pathname = usePathname()
   return (
     <nav className="w-48 shrink-0">
       <ul className="flex flex-col gap-1">
-        {items.map((it) => {
+        {ITEMS.map((it) => {
           const Icon = it.icon
-          const active = pathname === it.href || (it.href !== "/admin" && pathname.startsWith(it.href))
+          const active =
+            pathname === it.href || (it.href !== "/admin" && pathname.startsWith(it.href))
           return (
             <li key={it.href}>
               <Link

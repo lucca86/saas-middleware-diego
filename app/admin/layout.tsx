@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Building2, ShieldCheck, Users } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 import { isPlatformAdmin } from "@/lib/platform/auth"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/server"
@@ -16,12 +16,6 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const allowed = await isPlatformAdmin()
   if (!allowed) redirect("/")
-
-  const items = [
-    { href: "/admin", label: "Resumen", icon: ShieldCheck },
-    { href: "/admin/tenants", label: "Tenants", icon: Building2 },
-    { href: "/admin/users", label: "Usuarios", icon: Users },
-  ] as const
 
   return (
     <div className="min-h-screen bg-background">
@@ -52,7 +46,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         </div>
       </header>
       <div className="mx-auto flex max-w-6xl gap-6 px-6 py-8">
-        <AdminNav items={items} />
+        <AdminNav />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>
