@@ -90,17 +90,39 @@ export default async function NewChannelPage({
 
               {p.id === "tiendanube" ? (
                 tnReady ? (
-                  <form
-                    action={async () => {
-                      "use server"
-                      await startTiendaNubeConnect(slug)
-                    }}
-                  >
-                    <Button type="submit" className="w-full shadow-signal">
-                      <Lock className="mr-1.5 h-4 w-4" />
-                      Conectar con Tienda Nube
-                    </Button>
-                  </form>
+                  <>
+                    <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs">
+                      <p className="font-medium text-foreground">Necesitás tu cuenta de Tienda Nube.</p>
+                      <p className="mt-1 text-muted-foreground">
+                        Vas a iniciar sesión con el email/password con el que entrás al admin de tu tienda en{" "}
+                        <span className="font-mono">mitiendanube.com/admin</span>. <strong>No</strong> uses tus
+                        credenciales de Stockcurve.
+                      </p>
+                      <p className="mt-2 text-muted-foreground">
+                        ¿No tenés tienda?{" "}
+                        <a
+                          href="https://www.tiendanube.com/crear-tienda-online"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline underline-offset-2"
+                        >
+                          Creá una gratis acá
+                        </a>{" "}
+                        y volvé.
+                      </p>
+                    </div>
+                    <form
+                      action={async () => {
+                        "use server"
+                        await startTiendaNubeConnect(slug)
+                      }}
+                    >
+                      <Button type="submit" className="w-full shadow-signal">
+                        <Lock className="mr-1.5 h-4 w-4" />
+                        Conectar con Tienda Nube
+                      </Button>
+                    </form>
+                  </>
                 ) : (
                   <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
                     <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
@@ -123,9 +145,14 @@ export default async function NewChannelPage({
         <CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">¿Qué pasa al conectar?</p>
           <ol className="list-decimal space-y-1 pl-5">
-            <li>Te redirigimos al login del provider para que autorices la app.</li>
+            <li>
+              Te redirigimos al sitio del <strong className="text-foreground">provider</strong> (ej.
+              tiendanube.com) para que <strong className="text-foreground">vos</strong> inicies sesión con tu
+              cuenta de esa plataforma.
+            </li>
+            <li>Aprobás la instalación de la app en tu tienda.</li>
             <li>El provider nos devuelve un access token (no tu contraseña).</li>
-            <li>Pedimos los datos básicos de tu tienda y los guardamos cifrados al tenant.</li>
+            <li>Pedimos los datos básicos de tu tienda y los guardamos atados al tenant.</li>
             <li>Volvés acá con el node activo, listo para sincronizar.</li>
           </ol>
         </CardContent>
