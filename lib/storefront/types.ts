@@ -65,6 +65,7 @@ export interface PublicProductDetail {
   > & {
     type_name: string | null
     category_name: string | null
+    category_slug: string | null
   }
   variants: ProductVariant[]
   images: PublicProductImage[]

@@ -36,9 +36,13 @@ export const getPublicTenant = cache(async (slug: string): Promise<PublicTenant 
   }
 })
 
+export type PublicSort = "newest" | "price-asc" | "price-desc" | "name"
+
 export interface PublicListFilters {
   categorySlug?: string
   search?: string
+  sort?: PublicSort
+  inStock?: boolean
 }
 
 /** List active products with their summary info for a published tenant. */
@@ -48,6 +52,10 @@ export async function listPublicProducts(
   options: { hideOutOfStock?: boolean } = {},
 ): Promise<PublicProductCard[]> {
   const supabase = createPublicClient()
+  // We always paginate at the DB by `updated_at` and re-sort the resulting
+  // cards in JS afterwards. Sorting by `min_price` requires aggregating
+  // variants, which we already compute below — doing it in SQL would force a
+  // less reusable query for each sort key.
   let q = supabase
     .from("products")
     .select(
@@ -113,11 +121,67 @@ export async function listPublicProducts(
   if (filters.categorySlug) {
     filtered = filtered.filter((c) => c._category_slug === filters.categorySlug)
   }
-  if (options.hideOutOfStock) {
+  if (options.hideOutOfStock || filters.inStock) {
     filtered = filtered.filter((c) => c.has_stock)
   }
 
+  // Sort. Default order from the DB is `updated_at desc`, which we map to
+  // "newest". Price sort uses min_price; products without price go last.
+  const sort: PublicSort = filters.sort ?? "newest"
+  if (sort === "price-asc" || sort === "price-desc") {
+    const dir = sort === "price-asc" ? 1 : -1
+    filtered.sort((a, b) => {
+      const ap = a.min_price ?? Number.POSITIVE_INFINITY
+      const bp = b.min_price ?? Number.POSITIVE_INFINITY
+      return (ap - bp) * dir
+    })
+  } else if (sort === "name") {
+    filtered.sort((a, b) => a.name.localeCompare(b.name, "es"))
+  }
+  // "newest" — already in DB order.
+
   return filtered.map(({ _category_slug, ...rest }) => rest)
+}
+
+/**
+ * Featured shelf for the storefront home: the most recently updated active
+ * products that have stock and at least one image. We keep it small (8) so
+ * the section reads as a curated row, not a duplicate of the main grid.
+ */
+export async function listFeaturedProducts(
+  tenantId: string,
+  limit = 8,
+): Promise<PublicProductCard[]> {
+  const all = await listPublicProducts(
+    tenantId,
+    { sort: "newest", inStock: true },
+  )
+  return all.filter((p) => p.primary_image).slice(0, limit)
+}
+
+/**
+ * Related products for the PDP. Same category as the current product when
+ * possible; falls back to the latest from the same tenant. Excludes the
+ * current product and out-of-stock items.
+ */
+export async function listRelatedProducts(
+  tenantId: string,
+  currentProductId: string,
+  categoryId: string | null,
+  limit = 4,
+): Promise<PublicProductCard[]> {
+  // Delegated to listPublicProducts so we reuse its card-shaping logic.
+  // We sort/filter in JS over the same cards because the result set is small.
+  const all = await listPublicProducts(tenantId, { inStock: true })
+  const sameCategory = categoryId
+    ? all.filter((p) => p.id !== currentProductId && p.category_id === categoryId)
+    : []
+  if (sameCategory.length >= limit) return sameCategory.slice(0, limit)
+
+  const filler = all.filter(
+    (p) => p.id !== currentProductId && !sameCategory.find((s) => s.id === p.id),
+  )
+  return [...sameCategory, ...filler].slice(0, limit)
 }
 
 export async function listPublicCategories(tenantId: string): Promise<PublicCategory[]> {
@@ -165,7 +229,7 @@ export async function getPublicProductBySlug(
       `
       id, tenant_id, name, slug, description, category_id, tags, attributes,
       product_types!products_type_id_fkey(name),
-      categories!products_category_id_fkey(name)
+      categories!products_category_id_fkey(name, slug)
       `,
     )
     .eq("tenant_id", tenantId)
@@ -177,6 +241,7 @@ export async function getPublicProductBySlug(
 
   const ptype = Array.isArray(product.product_types) ? product.product_types[0] : product.product_types
   const cat = Array.isArray(product.categories) ? product.categories[0] : product.categories
+  const catSlug = (cat as { slug?: string } | null | undefined)?.slug ?? null
 
   const [{ data: variants }, { data: images }] = await Promise.all([
     supabase
@@ -205,6 +270,7 @@ export async function getPublicProductBySlug(
       attributes: (product.attributes ?? {}) as ProductAttributesData,
       type_name: ptype?.name ?? null,
       category_name: cat?.name ?? null,
+      category_slug: catSlug,
     },
     variants: (variants ?? []) as ProductVariant[],
     images: ((images ?? []) as Array<{

@@ -9,6 +9,8 @@ interface Props {
   products: PublicProductCard[]
   currency: string
   hidePrices?: boolean
+  /** True when the user has any active filter — shown to offer a "reset" CTA. */
+  hasActiveFilters?: boolean
 }
 
 export function StorefrontProductGrid({
@@ -16,6 +18,7 @@ export function StorefrontProductGrid({
   products,
   currency,
   hidePrices,
+  hasActiveFilters,
 }: Props) {
   if (products.length === 0) {
     return (
@@ -25,8 +28,18 @@ export function StorefrontProductGrid({
           No hay productos para mostrar
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Probá quitar los filtros o volvé más tarde.
+          {hasActiveFilters
+            ? "Ningún producto coincide con tu búsqueda."
+            : "Volvé más tarde — esta tienda todavía no tiene productos publicados."}
         </p>
+        {hasActiveFilters ? (
+          <Link
+            href={`/s/${tenantSlug}`}
+            className="mt-5 inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-sm transition hover:border-foreground/40 hover:text-foreground"
+          >
+            Limpiar filtros
+          </Link>
+        ) : null}
       </div>
     )
   }
