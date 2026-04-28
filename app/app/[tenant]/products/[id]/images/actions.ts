@@ -173,6 +173,41 @@ export async function setPrimaryImage(
   return { ok: true }
 }
 
+/**
+ * Update the alt text of an image. Used for accessibility + storefront SEO.
+ * Empty string clears the alt (treated as decorative for screen readers).
+ */
+export async function updateImageAlt(
+  tenantSlug: string,
+  imageId: string,
+  alt: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { tenant, role } = await requireTenant(tenantSlug)
+  if (!["owner", "admin", "operator"].includes(role)) {
+    return { ok: false, error: "Sin permiso" }
+  }
+
+  const trimmed = alt.trim().slice(0, 200)
+  const supabase = await createClient()
+  const { data: image, error: getErr } = await supabase
+    .from("product_images")
+    .select("id, product_id")
+    .eq("id", imageId)
+    .eq("tenant_id", tenant.id)
+    .maybeSingle()
+  if (getErr || !image) return { ok: false, error: "Imagen no encontrada" }
+
+  const { error } = await supabase
+    .from("product_images")
+    .update({ alt: trimmed === "" ? null : trimmed })
+    .eq("id", imageId)
+    .eq("tenant_id", tenant.id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/app/${tenantSlug}/products/${image.product_id}`)
+  return { ok: true }
+}
+
 /** Persist a new ordering of images. */
 export async function reorderProductImages(
   tenantSlug: string,

@@ -2,16 +2,27 @@
 
 import Image from "next/image"
 import { useCallback, useRef, useState, useTransition } from "react"
-import { Star, Trash2, Upload, GripVertical, ImageOff } from "lucide-react"
+import { Pencil, Star, Trash2, Upload, GripVertical, ImageOff } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import {
   deleteProductImage,
   setPrimaryImage,
   reorderProductImages,
+  updateImageAlt,
 } from "@/app/app/[tenant]/products/[id]/images/actions"
 import type { ProductImage } from "@/lib/products/images"
 
@@ -46,6 +57,9 @@ export function ProductImagesUploader({ tenantSlug, productId, initial, readonly
   const [uploading, setUploading] = useState<{ id: string; name: string }[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  // Alt-text editor: holds the image being edited (or null when closed)
+  // and a draft string that the user can cancel without persisting.
+  const [altEdit, setAltEdit] = useState<{ image: ProductImage; draft: string } | null>(null)
   const [, startTransition] = useTransition()
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -151,6 +165,24 @@ export function ProductImagesUploader({ tenantSlug, productId, initial, readonly
       if (!res.ok) {
         toast.error(res.error)
         setImages(prev)
+      }
+    })
+  }
+
+  function onSaveAlt() {
+    if (!altEdit) return
+    const { image, draft } = altEdit
+    const newAlt = draft.trim().slice(0, 200)
+    const prev = images
+    setImages((list) => list.map((i) => (i.id === image.id ? { ...i, alt: newAlt || null } : i)))
+    setAltEdit(null)
+    startTransition(async () => {
+      const res = await updateImageAlt(tenantSlug, image.id, newAlt)
+      if (!res.ok) {
+        toast.error(res.error)
+        setImages(prev)
+      } else {
+        toast.success("Alt text actualizado")
       }
     })
   }
@@ -289,6 +321,16 @@ export function ProductImagesUploader({ tenantSlug, productId, initial, readonly
                     <Button
                       type="button"
                       size="icon"
+                      variant="secondary"
+                      className="h-7 w-7"
+                      onClick={() => setAltEdit({ image: img, draft: img.alt ?? "" })}
+                      title="Editar alt text"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
                       variant="destructive"
                       className="h-7 w-7"
                       onClick={() => onDelete(img.id)}
@@ -297,6 +339,14 @@ export function ProductImagesUploader({ tenantSlug, productId, initial, readonly
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
+
+                  {/* Footer ribbon shows the alt text so editors see it without
+                      hovering. Truncated to one line; full text is in the dialog. */}
+                  {img.alt ? (
+                    <div className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 py-1 text-[10px] text-white">
+                      {img.alt}
+                    </div>
+                  ) : null}
 
                   <div className="absolute bottom-1.5 left-1.5 cursor-grab rounded bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100">
                     <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
@@ -307,6 +357,61 @@ export function ProductImagesUploader({ tenantSlug, productId, initial, readonly
           ))}
         </ul>
       )}
+
+      {/* Alt-text editor dialog. Lives outside the gallery list so its state
+          is decoupled from the cards (avoids re-rendering all images while
+          typing). */}
+      <Dialog open={altEdit !== null} onOpenChange={(open) => !open && setAltEdit(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar alt text</DialogTitle>
+            <DialogDescription>
+              Describí lo que se ve en la imagen. Mejora SEO y accesibilidad para lectores de pantalla.
+              Dejalo vacío si la imagen es decorativa.
+            </DialogDescription>
+          </DialogHeader>
+          {altEdit ? (
+            <div className="flex flex-col gap-3">
+              <div className="aspect-video overflow-hidden rounded-md border border-border bg-muted">
+                <Image
+                  src={altEdit.image.url}
+                  alt={altEdit.image.alt ?? ""}
+                  width={400}
+                  height={225}
+                  className="h-full w-full object-contain"
+                  unoptimized
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="alt-text" className="text-xs">
+                  Alt text
+                </Label>
+                <Input
+                  id="alt-text"
+                  value={altEdit.draft}
+                  maxLength={200}
+                  onChange={(e) =>
+                    setAltEdit((prev) => (prev ? { ...prev, draft: e.target.value } : prev))
+                  }
+                  placeholder="Ej: Remera blanca de algodón con logo bordado"
+                  autoFocus
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {altEdit.draft.length}/200
+                </p>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setAltEdit(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={onSaveAlt}>
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
