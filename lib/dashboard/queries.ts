@@ -109,7 +109,7 @@ export async function getLowStockVariants(
     .order("stock", { ascending: true })
     .limit(limit)
 
-  return ((data ?? []) as Array<{
+  return ((data ?? []) as unknown as Array<{
     id: string
     product_id: string
     attributes: Record<string, string>
@@ -152,7 +152,7 @@ export async function getRecentMovements(tenantId: string, limit = 10): Promise<
     .order("created_at", { ascending: false })
     .limit(limit)
 
-  return ((data ?? []) as Array<{
+  return ((data ?? []) as unknown as Array<{
     id: string
     type: MovementRow["type"]
     qty: number

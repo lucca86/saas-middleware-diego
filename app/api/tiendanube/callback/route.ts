@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       storeUrl = store.url ?? store.original_domain ?? null
       country = store.country ?? null
       currency = store.main_currency ?? null
-      metadata = store as Record<string, unknown>
+      metadata = store as unknown as Record<string, unknown>
     } catch {
       // Don't block the install if /store fails — we still have a usable
       // token. The user can hit "Probar conexión" later.

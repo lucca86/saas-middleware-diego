@@ -95,11 +95,14 @@ export async function platformStats() {
     supabase.from("products").select("id", { count: "exact", head: true }),
     supabase.from("product_variants").select("id", { count: "exact", head: true }),
   ])
+  // listUsers returns Pagination metadata only on the success branch; we
+  // treat it as an opaque shape and read total defensively.
   const { data: list } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
+  const total = (list as unknown as { total?: number } | null)?.total ?? 0
   return {
     tenants: tenants ?? 0,
     products: products ?? 0,
     variants: variants ?? 0,
-    users: list?.total ?? 0,
+    users: total,
   }
 }

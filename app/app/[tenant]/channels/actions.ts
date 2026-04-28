@@ -119,7 +119,7 @@ export async function testChannelConnection(tenantSlug: string, channelId: strin
         country: store.country ?? null,
         currency: store.main_currency ?? null,
         store_url: store.url ?? store.original_domain ?? null,
-        metadata: { ...(store as Record<string, unknown>) },
+        metadata: { ...(store as unknown as Record<string, unknown>) },
       })
       .eq("id", channelId)
     revalidatePath(`/app/${tenantSlug}/channels/${channelId}`)
