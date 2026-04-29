@@ -2,6 +2,16 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 /**
+ * Cookie overrides — see `lib/supabase/server.ts` for the rationale. In
+ * short: SameSite=None+Secure is required for the v0 preview iframe and
+ * doesn't hurt production.
+ */
+const COOKIE_OVERRIDES = {
+  sameSite: "none",
+  secure: true,
+} as const
+
+/**
  * Refreshes the Supabase session, validates tenant membership for /[tenant]/*
  * paths, and redirects unauthenticated users to /auth/login when hitting app
  * routes.
@@ -28,7 +38,9 @@ export async function updateSession(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, { ...options, ...COOKIE_OVERRIDES }),
+          )
         },
       },
     },
@@ -55,12 +67,37 @@ export async function updateSession(request: NextRequest) {
 
   const isAppRoute = pathname.startsWith("/app/")
 
+  /**
+   * Helper: build a redirect response that PRESERVES the cookies Supabase
+   * just refreshed. The default `NextResponse.redirect(url)` returns a
+   * brand-new response with no cookies, which means every redirect would
+   * silently drop the rotated access/refresh tokens and the user would
+   * see "logged out" right after a redirect. We copy the cookies from
+   * `supabaseResponse` (which was rebuilt inside `setAll` above) onto
+   * the redirect response.
+   */
+  function redirectWithCookies(url: URL) {
+    const res = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      res.cookies.set(c.name, c.value, {
+        path: c.path,
+        domain: c.domain,
+        expires: c.expires,
+        httpOnly: c.httpOnly,
+        maxAge: c.maxAge,
+        sameSite: "none",
+        secure: true,
+      })
+    })
+    return res
+  }
+
   // Unauthenticated user trying to access protected routes
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
     url.searchParams.set("next", pathname)
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url)
   }
 
   // Authenticated user on /app/[tenant]/* -> validate membership
@@ -81,7 +118,7 @@ export async function updateSession(request: NextRequest) {
         url.pathname = "/select-tenant"
         // Generic flag — never echo the slug, see lib/tenant/context.ts.
         url.searchParams.set("denied", "1")
-        return NextResponse.redirect(url)
+        return redirectWithCookies(url)
       }
 
       // Propagate tenant context via headers for downstream RSCs
@@ -94,7 +131,7 @@ export async function updateSession(request: NextRequest) {
   if (user && pathname.startsWith("/auth") && !pathname.startsWith("/auth/callback") && !isAuthedNoTenantRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/select-tenant"
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url)
   }
 
   return supabaseResponse
