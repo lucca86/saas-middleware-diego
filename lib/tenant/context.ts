@@ -2,6 +2,7 @@ import "server-only"
 import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 
 export type TenantRole = "owner" | "admin" | "operator" | "viewer"
 
@@ -25,19 +26,16 @@ export interface TenantContext {
  * and verify that the authenticated user is a member.
  *
  * Cached per-request via React cache() so RSCs inside the same layout tree
- * reuse the same DB query.
+ * reuse the same DB query. Auth user is resolved through the shared
+ * getCurrentUser() helper to avoid duplicate /auth/v1/user calls.
  */
 export const requireTenant = cache(async (slug: string): Promise<TenantContext> => {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const user = await getCurrentUser()
   if (!user) {
     redirect(`/auth/login?next=/app/${slug}`)
   }
 
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from("tenant_members")
     .select(
@@ -75,14 +73,10 @@ export const requireTenant = cache(async (slug: string): Promise<TenantContext> 
  * and the tenant switcher popover.
  */
 export const listUserTenants = cache(async () => {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const user = await getCurrentUser()
   if (!user) return []
 
+  const supabase = await createClient()
   const { data } = await supabase
     .from("tenant_members")
     .select("role, tenant:tenants!inner(id, slug, name, plan)")
@@ -99,12 +93,10 @@ export const listUserTenants = cache(async () => {
 })
 
 export const getCurrentUserProfile = cache(async () => {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) return null
 
+  const supabase = await createClient()
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, email, full_name, avatar_url")
