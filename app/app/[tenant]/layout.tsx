@@ -35,12 +35,16 @@ export default async function TenantLayout({
       <AppSidebar current={current} tenants={tenants} isPlatformAdmin={platformAdmin} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <AppTopbar
-          tenantSlug={tenant.slug}
+          current={current}
+          tenants={tenants}
+          isPlatformAdmin={platformAdmin}
           fullName={profile?.full_name ?? null}
           email={profile?.email ?? null}
           avatarUrl={profile?.avatar_url ?? null}
         />
-        <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        {/* Reduced padding on mobile so content gets real estate; desktop keeps
+            the original 8-unit padding. */}
+        <main className="flex-1 overflow-y-auto px-4 py-5 md:px-8 md:py-8">{children}</main>
       </div>
     </div>
   )

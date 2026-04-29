@@ -15,17 +15,26 @@ const ITEMS = [
   { href: "/admin/users", label: "Usuarios", icon: Users },
 ] as const
 
+/**
+ * Admin sidebar.
+ *  - Mobile: horizontal scrollable tab strip — each item shrinks to icon+label,
+ *    the whole strip lives in a thin band under the header.
+ *  - Desktop (md+): the original 48-wide vertical column.
+ */
 export function AdminNav() {
   const pathname = usePathname()
   return (
-    <nav className="w-48 shrink-0">
-      <ul className="flex flex-col gap-1">
+    <nav
+      aria-label="Secciones de plataforma"
+      className="-mx-4 border-b border-border md:mx-0 md:w-48 md:shrink-0 md:border-0"
+    >
+      <ul className="flex flex-row gap-1 overflow-x-auto whitespace-nowrap px-4 pb-2 md:flex-col md:overflow-visible md:px-0 md:pb-0">
         {ITEMS.map((it) => {
           const Icon = it.icon
           const active =
             pathname === it.href || (it.href !== "/admin" && pathname.startsWith(it.href))
           return (
-            <li key={it.href}>
+            <li key={it.href} className="shrink-0 md:shrink">
               <Link
                 href={it.href}
                 className={cn(

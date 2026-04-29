@@ -31,9 +31,11 @@ export async function signInAction(_: unknown, formData: FormData): Promise<{ er
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  console.log("[v0] login attempt:", email)
+  const { error, data } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
+    console.log("[v0] login error:", error.message)
     // Map a couple of well-known Supabase errors to friendlier copy.
     const msg =
       error.message === "Invalid login credentials"
@@ -41,6 +43,7 @@ export async function signInAction(_: unknown, formData: FormData): Promise<{ er
         : error.message
     return { error: msg }
   }
+  console.log("[v0] login ok, user:", data.user?.id)
 
   // Only redirect to safe internal paths to prevent open-redirect.
   const target = next.startsWith("/") && !next.startsWith("//") ? next : "/select-tenant"

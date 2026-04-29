@@ -42,10 +42,11 @@ export interface AdminTenantRow {
 
 export function AdminTenantsClient({ tenants }: { tenants: AdminTenantRow[] }) {
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">Tenants</h1>
+    <div className="space-y-4 md:space-y-6">
+      {/* Header wraps on mobile so the CTA button never collides with the title. */}
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="font-display text-xl font-bold tracking-tight md:text-2xl">Tenants</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {tenants.length} tenant{tenants.length === 1 ? "" : "s"} activo
             {tenants.length === 1 ? "" : "s"} en la plataforma.
@@ -56,6 +57,9 @@ export function AdminTenantsClient({ tenants }: { tenants: AdminTenantRow[] }) {
 
       <Card>
         <CardContent className="p-0">
+          {/* Horizontal scroll inside the card prevents the whole shell from
+              overflowing on narrow viewports while keeping the table layout. */}
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -118,6 +122,7 @@ export function AdminTenantsClient({ tenants }: { tenants: AdminTenantRow[] }) {
               ) : null}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

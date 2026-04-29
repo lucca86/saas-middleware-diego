@@ -22,20 +22,27 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/40">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4 md:px-6 md:py-4">
+          {/* Brand block — wraps next to the title on its own row on mobile. */}
           <div className="flex items-center gap-3">
-            <ShieldCheck className="h-5 w-5 text-primary" aria-hidden />
-            <div>
+            <ShieldCheck className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+            <div className="min-w-0">
               <div className="font-display text-base font-semibold tracking-tight text-foreground">
                 Panel de plataforma
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="truncate text-xs text-muted-foreground">
                 Administración de Stockcurve · alcance global
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-[0.2em]">
+
+          {/* Actions cluster wraps on small screens so it never overflows. */}
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            <Badge
+              variant="outline"
+              className="max-w-[160px] truncate font-mono text-[10px] uppercase tracking-[0.2em] sm:max-w-none"
+              title={user.email ?? undefined}
+            >
               {user.email}
             </Badge>
             <Link
@@ -49,7 +56,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           </div>
         </div>
       </header>
-      <div className="mx-auto flex max-w-6xl gap-6 px-6 py-8">
+      {/* Admin shell switches between stacked (mobile) and two-column (desktop). */}
+      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 md:flex-row md:gap-6 md:px-6 md:py-8">
         <AdminNav />
         <main className="min-w-0 flex-1">{children}</main>
       </div>

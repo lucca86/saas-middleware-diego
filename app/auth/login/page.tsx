@@ -1,5 +1,7 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { LoginForm } from "@/components/auth/login-form"
+import { createClient } from "@/lib/supabase/server"
 
 export default async function LoginPage({
   searchParams,
@@ -7,6 +9,18 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>
 }) {
   const { next } = await searchParams
+
+  // If the user is already authenticated, skip the form. Otherwise it
+  // looks like "nothing happens" because the dispatcher silently bounces
+  // them away once the form submits with the same session.
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) {
+    const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/select-tenant"
+    redirect(target)
+  }
 
   return (
     <div className="w-full max-w-md">
