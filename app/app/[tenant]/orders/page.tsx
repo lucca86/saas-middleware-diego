@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { Receipt } from "lucide-react"
+import { ChevronRight, Receipt } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import {
   countTenantOrdersByStatus,
@@ -92,6 +92,10 @@ export default async function OrdersPage({
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
+              {/* The whole row is a link so any click on the order opens the
+                  detail page where the team can confirm/fulfill/cancel. We use
+                  a `tr` with `Link`s in every cell because nesting an `a`
+                  around a `tr` is invalid HTML. */}
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -100,44 +104,68 @@ export default async function OrdersPage({
                     <th className="px-4 py-3">Fecha</th>
                     <th className="px-4 py-3">Estado</th>
                     <th className="px-4 py-3 text-right">Total</th>
+                    <th className="w-10 px-4 py-3" aria-hidden />
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((o) => (
-                    <tr
-                      key={o.id}
-                      className="border-b border-border last:border-0 transition hover:bg-muted/40"
-                    >
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/app/${tenantSlug}/orders/${o.id}`}
-                          className="font-mono text-sm font-semibold text-foreground hover:underline"
-                        >
-                          {o.code}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium leading-tight">{o.customer_name}</p>
-                        <p className="text-xs text-muted-foreground">{o.customer_email}</p>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(o.created_at).toLocaleString("es-AR", {
-                          day: "2-digit",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant="outline" className={STATUS_BADGE[o.status]}>
-                          {ORDER_STATUS_LABEL[o.status]}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono">
-                        {formatPrice(Number(o.total), o.currency)}
-                      </td>
-                    </tr>
-                  ))}
+                  {orders.map((o) => {
+                    const href = `/app/${tenantSlug}/orders/${o.id}`
+                    const cell = "px-4 py-3 align-middle"
+                    return (
+                      <tr
+                        key={o.id}
+                        className="group cursor-pointer border-b border-border last:border-0 transition hover:bg-muted/40 focus-within:bg-muted/40"
+                      >
+                        <td className={cell}>
+                          <Link
+                            href={href}
+                            className="block font-mono text-sm font-semibold text-foreground transition group-hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          >
+                            {o.code}
+                          </Link>
+                        </td>
+                        <td className={cell}>
+                          <Link href={href} className="block focus:outline-none">
+                            <p className="font-medium leading-tight">{o.customer_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {o.customer_email}
+                            </p>
+                          </Link>
+                        </td>
+                        <td className={`${cell} text-muted-foreground`}>
+                          <Link href={href} className="block focus:outline-none">
+                            {new Date(o.created_at).toLocaleString("es-AR", {
+                              day: "2-digit",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </Link>
+                        </td>
+                        <td className={cell}>
+                          <Link href={href} className="block focus:outline-none">
+                            <Badge variant="outline" className={STATUS_BADGE[o.status]}>
+                              {ORDER_STATUS_LABEL[o.status]}
+                            </Badge>
+                          </Link>
+                        </td>
+                        <td className={`${cell} text-right`}>
+                          <Link href={href} className="block font-mono focus:outline-none">
+                            {formatPrice(Number(o.total), o.currency)}
+                          </Link>
+                        </td>
+                        <td className={`${cell} text-right text-muted-foreground`}>
+                          <Link
+                            href={href}
+                            className="inline-flex items-center justify-center rounded transition group-hover:translate-x-0.5 group-hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label={`Ver pedido ${o.code}`}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
