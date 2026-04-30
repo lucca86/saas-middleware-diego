@@ -84,7 +84,21 @@ export default async function StorefrontHomePage({
         />
       ) : null}
 
-      <section className="mx-auto max-w-6xl px-4 pb-12 md:px-6">
+      <section
+        id="catalogo"
+        className="mx-auto max-w-7xl scroll-mt-28 px-4 py-12 md:px-8 md:py-20"
+      >
+        <div className="mb-10 flex items-end justify-between gap-4 md:mb-14">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+              Catálogo
+            </p>
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-[-0.01em] text-foreground md:text-5xl">
+              Todos los productos
+            </h2>
+          </div>
+        </div>
+
         <StorefrontSearchBar
           tenantSlug={tenant.slug}
           initialQuery={sp.q ?? ""}

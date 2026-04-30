@@ -16,6 +16,7 @@ import type {
   PublicProductDetail,
   StorefrontConfig,
 } from "@/lib/storefront/types"
+import { StorefrontAddToCart } from "./storefront-add-to-cart"
 
 interface Props {
   tenantSlug: string
@@ -223,27 +224,28 @@ export function StorefrontProductDetail({
           </div>
         ) : null}
 
-        {/* CTA */}
-        <div className="mt-8">
+        {/* CTA: cart-first, WhatsApp as secondary follow-up */}
+        <div className="mt-8 space-y-3">
+          <StorefrontAddToCart
+            tenantSlug={tenantSlug}
+            variantId={selected?.id ?? null}
+            disabled={!selected || !inStock}
+            label={
+              !selected
+                ? "Combinación no disponible"
+                : !inStock
+                  ? "Sin stock"
+                  : "Agregar al carrito"
+            }
+          />
           {waUrl ? (
-            selected ? (
-              <Button asChild size="lg" className="w-full">
-                <a href={waUrl} target="_blank" rel="noopener noreferrer">
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  {inStock ? "Consultar por WhatsApp" : "Consultar disponibilidad"}
-                </a>
-              </Button>
-            ) : (
-              <Button size="lg" className="w-full" disabled>
+            <Button asChild variant="outline" size="lg" className="w-full">
+              <a href={waUrl} target="_blank" rel="noopener noreferrer">
                 <MessageCircle className="mr-2 h-4 w-4" />
-                Combinación no disponible
-              </Button>
-            )
-          ) : (
-            <div className="rounded-md border border-dashed border-border bg-card/30 px-4 py-3 text-center text-sm text-muted-foreground">
-              Esta tienda todavía no configuró un canal de contacto.
-            </div>
-          )}
+                Consultar por WhatsApp
+              </a>
+            </Button>
+          ) : null}
         </div>
 
         {product.description ? (
