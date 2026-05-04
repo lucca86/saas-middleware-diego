@@ -26,6 +26,18 @@ export interface StorefrontConfig {
   hide_out_of_stock?: boolean
   /** Don't show prices (e.g. wholesale-only stores). */
   hide_prices?: boolean
+  /**
+   * Sender used in transactional order emails.
+   * Format: "Name <email@verified-domain.com>" or just an email address.
+   * The address must be on a domain verified by the tenant in Resend; if
+   * the field is empty we skip customer-facing order emails.
+   */
+  from_email?: string
+  /**
+   * Internal address that receives a notification when a new order is placed
+   * in the storefront. Optional; empty means we don't notify the tenant.
+   */
+  notification_email?: string
 }
 
 export interface PublicTenant {

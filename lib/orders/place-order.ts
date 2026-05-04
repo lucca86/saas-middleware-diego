@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { createServiceClient } from "@/lib/supabase/service"
 import { clearCart, readCart } from "@/lib/cart/cookie"
+import { notifyOrderEvent } from "@/lib/email/notify-order-event"
 
 /**
  * Place a new storefront order.
@@ -180,6 +181,15 @@ export async function placeOrder(
   }
 
   await clearCart(tenantSlug)
+
+  // Fire-and-forget transactional emails. Both helpers swallow errors so an
+  // SMTP outage never blocks the order. We don't await in parallel because
+  // we want the customer email to be the priority; tenant notification is
+  // secondary. Both run before we return so the cookie and headers are
+  // already settled.
+  await notifyOrderEvent(order.id, "received")
+  await notifyOrderEvent(order.id, "tenant_notification")
+
   revalidatePath(`/s/${tenantSlug}`, "layout")
   revalidatePath(`/app/${tenantSlug}/orders`)
   return { ok: true, orderCode: order.code, total: Number(order.total) }

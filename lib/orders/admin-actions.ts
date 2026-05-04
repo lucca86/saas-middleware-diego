@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache"
 import { requireTenant } from "@/lib/tenant/context"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
+import { notifyOrderEvent } from "@/lib/email/notify-order-event"
 import type { OrderStatus } from "./types"
+
+/** Map an `OrderStatus` to the matching email event sent to the customer. */
+const STATUS_TO_EVENT = {
+  confirmed: "confirmed",
+  fulfilled: "fulfilled",
+  cancelled: "cancelled",
+} as const
 
 const NEXT_STATUS: Record<OrderStatus, OrderStatus[]> = {
   pending: ["confirmed", "cancelled"],
@@ -82,6 +90,13 @@ export async function updateOrderStatus(
     .eq("id", orderId)
     .eq("tenant_id", tenant.id)
   if (updErr) return { ok: false, error: updErr.message }
+
+  // Customer email tied to the new status. The dispatcher swallows errors
+  // and is a no-op when email isn't configured for the tenant.
+  const eventName = STATUS_TO_EVENT[newStatus as keyof typeof STATUS_TO_EVENT]
+  if (eventName) {
+    await notifyOrderEvent(orderId, eventName)
+  }
 
   revalidatePath(`/app/${tenantSlug}/orders`)
   revalidatePath(`/app/${tenantSlug}/orders/${orderId}`)

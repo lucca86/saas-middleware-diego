@@ -286,6 +286,55 @@ export function StorefrontAdmin({
 
         <div className="my-6 h-px bg-border" />
         <h3 className="font-display text-sm font-bold uppercase tracking-[0.18em] text-muted-foreground">
+          Notificaciones por email
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Para enviar emails transaccionales (pedidos recibidos, confirmados, entregados o
+          cancelados) configurá un remitente verificado en{" "}
+          <a
+            href="https://resend.com/domains"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground underline-offset-2 hover:underline"
+          >
+            Resend → Domains
+          </a>
+          . Si dejás el remitente vacío, no se envían emails al cliente.
+        </p>
+
+        <FieldGroup className="mt-4">
+          <Field>
+            <FieldLabel>Remitente (from)</FieldLabel>
+            <Input
+              placeholder='Tu marca <pedidos@tu-dominio.com>'
+              value={form.from_email ?? ""}
+              onChange={(e) => update("from_email", e.target.value)}
+              disabled={readonly}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Aceptamos <code className="font-mono">email@dominio</code> o{" "}
+              <code className="font-mono">Nombre &lt;email@dominio&gt;</code>. El dominio debe estar
+              verificado en Resend.
+            </p>
+          </Field>
+
+          <Field>
+            <FieldLabel>Avisos de pedidos nuevos (interno)</FieldLabel>
+            <Input
+              type="email"
+              placeholder="pedidos@tu-marca.com"
+              value={form.notification_email ?? ""}
+              onChange={(e) => update("notification_email", e.target.value)}
+              disabled={readonly}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Te enviamos un mail acá cuando alguien hace un pedido en tu storefront. Opcional.
+            </p>
+          </Field>
+        </FieldGroup>
+
+        <div className="my-6 h-px bg-border" />
+        <h3 className="font-display text-sm font-bold uppercase tracking-[0.18em] text-muted-foreground">
           Comportamiento
         </h3>
 

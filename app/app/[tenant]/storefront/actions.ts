@@ -31,6 +31,18 @@ const configSchema = z.object({
     .or(z.literal("")),
   hide_out_of_stock: z.boolean().optional(),
   hide_prices: z.boolean().optional(),
+  // Free-form sender ("Name <email@domain>"). We accept either a bare email
+  // or that combined format; final validation happens at send-time in Resend.
+  from_email: z
+    .string()
+    .max(160)
+    .regex(
+      /^([^<>]{1,80}<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>)?$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/,
+      "Formato inválido. Usá email@dominio o Nombre <email@dominio>",
+    )
+    .optional()
+    .or(z.literal("")),
+  notification_email: z.string().email("Email inválido").max(160).optional().or(z.literal("")),
 })
 
 export type StorefrontFormState =
