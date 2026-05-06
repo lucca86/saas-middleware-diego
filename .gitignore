@@ -5,7 +5,9 @@ __v0_jsx-dev-runtime.ts
 .snowflake/
 .v0-trash/
 .vercel/
-next.user-config.*
+# next.user-config.mjs is intentionally tracked: next.config.mjs is the v0
+# auto-generated wrapper that imports it, so ignoring it would break dev
+# every time the sandbox re-syncs from GitHub.
 
 # Environment variables
 .env*.local
