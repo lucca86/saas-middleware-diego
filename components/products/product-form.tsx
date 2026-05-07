@@ -31,6 +31,7 @@ import {
 import { TagsInput } from "./tags-input"
 import { VariantsMatrix, type VariantRow } from "./variants-matrix"
 import { ProductImagesUploader } from "./product-images-uploader"
+import { AddVariantAttributeDialog } from "./add-variant-attribute-dialog"
 import { deleteProduct, saveProduct } from "@/app/app/[tenant]/products/actions"
 import {
   OPTION_LIST_KIND_LABELS,
@@ -406,15 +407,62 @@ export function ProductForm({
         </section>
       )}
 
-      {/* Variant attributes (per-product selection) */}
-      {variantAttrs.length > 0 ? (
+      {/* Variant attributes (per-product selection).
+          We always render this section now: when the type has no variant
+          attrs we show an empty-state CTA so the user understands how to
+          add Color / Talle / Material / custom from the same place. */}
+      {selectedType ? (
         <section className="rounded-lg border border-border bg-card p-5">
-          <div className="mb-4">
-            <h2 className="font-display text-base font-bold text-foreground">Atributos de variante</h2>
-            <p className="text-xs text-muted-foreground">
-              Marcá solo los valores que aplican a este producto. La grilla se regenera automáticamente.
-            </p>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-display text-base font-bold text-foreground">Atributos de variante</h2>
+              <p className="text-xs text-muted-foreground">
+                Marcá solo los valores que aplican a este producto. La grilla se regenera automáticamente.
+              </p>
+            </div>
+            {!readonly ? (
+              <div className="flex shrink-0 items-center gap-2">
+                <AddVariantAttributeDialog
+                  tenantSlug={tenantSlug}
+                  productType={selectedType}
+                  curves={curves}
+                />
+                <Button asChild type="button" variant="ghost" size="sm">
+                  <Link href={`/app/${tenantSlug}/product-types`}>
+                    Editar tipo
+                    <ExternalLink className="ml-1 h-3 w-3" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+            ) : null}
           </div>
+
+          {variantAttrs.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border bg-background/40 px-4 py-8 text-center">
+              <p className="font-display text-sm font-bold text-foreground">
+                El tipo &ldquo;{selectedType.name}&rdquo; no tiene atributos de variante
+              </p>
+              <p className="mx-auto mt-1.5 max-w-sm text-xs text-muted-foreground">
+                Agregá atributos como Color, Talle o Material para generar variantes con SKUs y stock
+                independientes.
+              </p>
+              {!readonly ? (
+                <div className="mt-4">
+                  <AddVariantAttributeDialog
+                    tenantSlug={tenantSlug}
+                    productType={selectedType}
+                    curves={curves}
+                    trigger={
+                      <Button type="button" size="sm">
+                        <span className="mr-1.5">+</span>
+                        Agregar primer atributo
+                      </Button>
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-4">
             {variantAttrs.map((attr) => {
@@ -519,7 +567,15 @@ export function ProductForm({
             })}
           </div>
         </section>
-      ) : null}
+      ) : (
+        <section className="rounded-lg border border-dashed border-border bg-card/40 p-5 text-center">
+          <p className="font-display text-sm font-bold text-foreground">Elegí un tipo de producto</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Los atributos de variante (Color, Talle, Material…) se definen en el tipo y se reutilizan en todos
+            los productos del mismo tipo.
+          </p>
+        </section>
+      )}
 
       {/* Variants matrix */}
       <section className="rounded-lg border border-border bg-card p-5">
