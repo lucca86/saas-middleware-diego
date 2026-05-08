@@ -37,7 +37,7 @@ interface Props {
   trigger?: React.ReactNode
 }
 
-const DEFAULT_SUGGESTIONS: Props["suggestions"] = [
+const DEFAULT_SUGGESTIONS: NonNullable<Props["suggestions"]> = [
   { label: "Color", key: "color", curveKind: "color" },
   { label: "Talle", key: "talle", curveKind: "size" },
   { label: "Material", key: "material", curveKind: "material" },
