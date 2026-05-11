@@ -4,8 +4,16 @@ import { ArrowLeft, CheckCircle2, ExternalLink } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { getChannel } from "@/lib/channels/queries"
 import { ChannelDetailClient } from "@/components/channels/channel-detail-client"
+import { WooCommerceImportCard } from "@/components/channels/woocommerce-import-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+
+const PROVIDER_LABEL: Record<string, string> = {
+  tiendanube: "Tienda Nube",
+  woocommerce: "WooCommerce",
+  mercadolibre: "Mercado Libre",
+  shopify: "Shopify",
+}
 
 const STATUS_VARIANT: Record<string, string> = {
   connected: "border-tertiary/30 bg-tertiary/15 text-tertiary",
@@ -53,7 +61,7 @@ export default async function ChannelDetailPage({
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            Tienda Nube · #{channel.external_id}
+            {PROVIDER_LABEL[channel.provider] ?? channel.provider} · {channel.external_id}
           </p>
           <h1 className="font-display text-3xl font-bold text-foreground">
             {channel.display_name ?? `Tienda ${channel.external_id}`}
@@ -147,6 +155,27 @@ export default async function ChannelDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {channel.provider === "woocommerce" ? (
+        <WooCommerceImportCard
+          tenantSlug={slug}
+          channelId={channel.id}
+          canManage={canManage}
+          lastImportAt={
+            typeof meta.last_import_at === "string" ? (meta.last_import_at as string) : null
+          }
+          lastImportSummary={
+            (meta.last_import_summary as {
+              productsImported: number
+              productsSkipped: number
+              variantsCreated: number
+              imagesUploaded: number
+              imagesFailed: number
+              errors: string[]
+            } | null) ?? null
+          }
+        />
+      ) : null}
 
       <ChannelDetailClient
         tenantSlug={slug}

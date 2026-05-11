@@ -6,9 +6,10 @@ import { startTiendaNubeConnect } from "../actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { WooCommerceConnectForm } from "@/components/channels/woocommerce-connect-form"
 
 interface ProviderOption {
-  id: "tiendanube" | "mercadolibre" | "shopify"
+  id: "tiendanube" | "woocommerce" | "mercadolibre" | "shopify"
   name: string
   description: string
   status: "available" | "soon"
@@ -20,6 +21,13 @@ const PROVIDERS: ProviderOption[] = [
     name: "Tienda Nube",
     description:
       "Sincroniza catálogo y stock con tu Tiendanube. Conexión vía OAuth: nunca pedimos tu contraseña.",
+    status: "available",
+  },
+  {
+    id: "woocommerce",
+    name: "WooCommerce",
+    description:
+      "Importá productos, variantes, precios y stock de tu WooCommerce. Conexión con Consumer Key + Secret generados en tu WP Admin.",
     status: "available",
   },
   {
@@ -131,6 +139,8 @@ export default async function NewChannelPage({
                     </span>
                   </div>
                 )
+              ) : p.id === "woocommerce" ? (
+                <WooCommerceConnectForm tenantSlug={slug} />
               ) : (
                 <Button disabled variant="outline" className="w-full bg-transparent">
                   Próximamente
