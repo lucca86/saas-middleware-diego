@@ -19,12 +19,16 @@ import {
 } from "@/components/ui/alert-dialog"
 import { importWooCommerce } from "@/app/app/[tenant]/channels/actions"
 
+/**
+ * Mirrors `ImportSummary` from `lib/channels/woocommerce-import.ts`. We
+ * redeclare it here to keep the import card a pure client component without
+ * pulling server-only modules into the bundle.
+ */
 interface ImportSummary {
-  productsImported: number
-  productsSkipped: number
-  variantsCreated: number
-  imagesUploaded: number
-  imagesFailed: number
+  total: number
+  imported: number
+  skipped: number
+  failed: number
   errors: string[]
 }
 
@@ -60,7 +64,8 @@ export function WooCommerceImportCard({
       }
       setResult(res.summary)
       toast.success(
-        `Import completo: ${res.summary.productsImported} productos, ${res.summary.variantsCreated} variantes.`,
+        `Import completo: ${res.summary.imported} de ${res.summary.total} productos.` +
+          (res.summary.failed > 0 ? ` ${res.summary.failed} fallaron.` : ""),
       )
       router.refresh()
     })
@@ -86,12 +91,10 @@ export function WooCommerceImportCard({
             </div>
             {result ? (
               <ul className="mt-2 space-y-0.5 font-mono">
-                <li>Productos: {result.productsImported} importados, {result.productsSkipped} omitidos</li>
-                <li>Variantes creadas: {result.variantsCreated}</li>
-                <li>
-                  Imágenes: {result.imagesUploaded} subidas
-                  {result.imagesFailed > 0 ? `, ${result.imagesFailed} fallaron` : ""}
-                </li>
+                <li>Total en WooCommerce: {result.total}</li>
+                <li>Importados: {result.imported}</li>
+                <li>Omitidos (ya existían): {result.skipped}</li>
+                {result.failed > 0 ? <li>Fallaron: {result.failed}</li> : null}
               </ul>
             ) : null}
           </div>

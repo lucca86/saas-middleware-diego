@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 export interface SalesChannelRow {
   id: string
   tenant_id: string
-  provider: "tiendanube" | "mercadolibre" | "shopify" | "custom"
+  provider: "tiendanube" | "woocommerce" | "mercadolibre" | "shopify" | "custom"
   external_id: string
   display_name: string | null
   store_url: string | null
