@@ -166,11 +166,10 @@ export default async function ChannelDetailPage({
           }
           lastImportSummary={
             (meta.last_import_summary as {
-              productsImported: number
-              productsSkipped: number
-              variantsCreated: number
-              imagesUploaded: number
-              imagesFailed: number
+              total: number
+              imported: number
+              skipped: number
+              failed: number
               errors: string[]
             } | null) ?? null
           }
