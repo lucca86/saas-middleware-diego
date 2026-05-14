@@ -208,3 +208,71 @@ export function wooIsValidStoreUrl(raw: string): boolean {
     return false
   }
 }
+
+// ─── Push helpers (SC → WC) ───────────────────────────────────────────────────
+
+/** Update top-level product fields in WC (name, status, description…). */
+export async function updateWooProduct(
+  creds: WooCredentials,
+  productId: number,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await wcRequest(creds, `/products/${productId}`, { method: "PUT", body: JSON.stringify(data) })
+}
+
+/** Update a specific variation's fields (price, sku, stock_status…). */
+export async function updateWooVariation(
+  creds: WooCredentials,
+  productId: number,
+  variationId: number,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await wcRequest(creds, `/products/${productId}/variations/${variationId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Update the stock quantity for a variation (or simple product when
+ * variationId is 0). WC requires `manage_stock: true` to honour qty changes.
+ */
+export async function updateWooStock(
+  creds: WooCredentials,
+  productId: number,
+  variationId: number,
+  qty: number,
+): Promise<void> {
+  const path =
+    variationId > 0
+      ? `/products/${productId}/variations/${variationId}`
+      : `/products/${productId}`
+  await wcRequest(creds, path, {
+    method: "PUT",
+    body: JSON.stringify({ manage_stock: true, stock_quantity: qty }),
+  })
+}
+
+/** Register a WC webhook. Used by Sprint C to subscribe to `order.created`. */
+export async function registerWooWebhook(
+  creds: WooCredentials,
+  topic: string,
+  deliveryUrl: string,
+  secret: string,
+): Promise<{ id: number }> {
+  const { data } = await wcRequest<{ id: number }>(creds, "/webhooks", {
+    method: "POST",
+    body: JSON.stringify({ topic, delivery_url: deliveryUrl, secret, status: "active" }),
+  })
+  return data
+}
+
+/** List existing webhooks (to avoid duplicates on re-connect). */
+export async function listWooWebhooks(
+  creds: WooCredentials,
+): Promise<Array<{ id: number; topic: string; delivery_url: string; status: string }>> {
+  const { data } = await wcRequest<
+    Array<{ id: number; topic: string; delivery_url: string; status: string }>
+  >(creds, "/webhooks?per_page=100")
+  return data
+}

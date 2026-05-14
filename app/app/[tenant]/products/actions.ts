@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireTenant } from "@/lib/tenant/context"
 import { slugify } from "@/lib/products/slug"
 import { variantKey } from "@/lib/products/cartesian"
+import { pushProductToWoo, pushVariantToWoo } from "@/lib/channels/woocommerce-push"
 
 const variantInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -224,6 +225,26 @@ export async function saveProduct(
 
   revalidatePath(`/app/${tenantSlug}/products`)
   revalidatePath(`/app/${tenantSlug}/products/${productId}`)
+
+  // Push to any mapped WooCommerce channels. Fire-and-forget; errors are
+  // caught inside the pusher so they never block the SC save response.
+  const { id: tenantId } = (await requireTenant(tenantSlug)).tenant
+  void pushProductToWoo(tenantId, productId, {
+    name: parsed.data.name,
+    status: parsed.data.status as "active" | "draft" | "archived",
+    description: parsed.data.description ?? undefined,
+  })
+  // Push each variant that has a WC mapping.
+  for (const v of parsed.data.variants) {
+    if (v.id) {
+      void pushVariantToWoo(tenantId, v.id, {
+        price: v.price,
+        compareAtPrice: v.compare_at_price ?? null,
+        sku: v.sku ?? null,
+        status: (v.status === "archived" ? "disabled" : v.status) as "active" | "disabled",
+      })
+    }
+  }
 
   return { ok: true, productId }
 }

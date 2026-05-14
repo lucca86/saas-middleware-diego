@@ -363,7 +363,7 @@ async function importOneProduct(ctx: Ctx, wc: WooProduct): Promise<boolean> {
     const variantsInsert = await service.from("product_variants").insert(variantRows).select("id, stock")
     if (variantsInsert.error) throw new Error(`Variants ${wc.id}: ${variantsInsert.error.message}`)
 
-    // Seed initial stock movements so the audit trail starts at the imported amount.
+    // Seed initial stock movements.
     const movementRows = (variantsInsert.data ?? [])
       .map((row) => ({
         tenant_id: tenantId,
@@ -378,6 +378,34 @@ async function importOneProduct(ctx: Ctx, wc: WooProduct): Promise<boolean> {
     if (movementRows.length > 0) {
       await service.from("stock_movements").insert(movementRows)
     }
+
+    // Persist channel_product_mappings so Sprint B (SC→WC push) and Sprint C
+    // (WC webhook) can look up SC ids from WC ids and vice-versa.
+    const variations = wc.type === "variable" ? await fetchVariations(ctx.creds, wc.id) : []
+    const mappingRows = (variantsInsert.data ?? []).map((row, idx) => ({
+      tenant_id: tenantId,
+      channel_id: channelId,
+      product_id: productId,
+      variant_id: row.id as string,
+      external_product_id: String(wc.id),
+      external_variant_id: wc.type === "variable" ? String(variations[idx]?.id ?? "") : null,
+      sync_direction: "imported" as const,
+      last_synced_at: new Date().toISOString(),
+    }))
+    // Product-level mapping (no variant_id) for quick product lookups.
+    const productMapping = {
+      tenant_id: tenantId,
+      channel_id: channelId,
+      product_id: productId,
+      variant_id: null as string | null,
+      external_product_id: String(wc.id),
+      external_variant_id: null as string | null,
+      sync_direction: "imported" as const,
+      last_synced_at: new Date().toISOString(),
+    }
+    await service
+      .from("channel_product_mappings")
+      .upsert([productMapping, ...mappingRows], { onConflict: "channel_id,external_product_id,external_variant_id" })
   }
 
   // Download images sequentially to avoid rate-limit spikes against the WP

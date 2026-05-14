@@ -7,7 +7,13 @@ import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { requireTenant } from "@/lib/tenant/context"
 import { buildAuthorizeUrl, fetchStore, tiendaNubeIsConfigured } from "@/lib/channels/tiendanube"
-import { fetchStoreInfo, wooIsValidStoreUrl, type WooCredentials } from "@/lib/channels/woocommerce"
+import {
+  fetchStoreInfo,
+  wooIsValidStoreUrl,
+  registerWooWebhook,
+  listWooWebhooks,
+  type WooCredentials,
+} from "@/lib/channels/woocommerce"
 import { runWooImport } from "@/lib/channels/woocommerce-import"
 
 /**
@@ -136,6 +142,78 @@ export async function testChannelConnection(tenantSlug: string, channelId: strin
   }
 }
 
+/**
+ * Register WooCommerce webhooks for `order.created` and `order.updated` so SC
+ * receives realtime order notifications. Idempotent: skips topics already
+ * registered to our delivery URL.
+ */
+export async function registerWooWebhooks(tenantSlug: string, channelId: string) {
+  const { tenant, role } = await requireTenant(tenantSlug)
+  if (!["owner", "admin"].includes(role)) {
+    return { ok: false as const, error: "Solo owner/admin pueden registrar webhooks." }
+  }
+
+  const service = createServiceClient()
+  const { data, error } = await service
+    .from("sales_channels")
+    .select("id, provider, access_token, refresh_token, store_url, metadata")
+    .eq("id", channelId)
+    .eq("tenant_id", tenant.id)
+    .maybeSingle()
+
+  if (error || !data) return { ok: false as const, error: "Canal no encontrado." }
+  if (data.provider !== "woocommerce") return { ok: false as const, error: "No es WooCommerce." }
+  if (!data.access_token || !data.refresh_token || !data.store_url) {
+    return { ok: false as const, error: "Faltan credenciales." }
+  }
+
+  const creds: WooCredentials = {
+    storeUrl: data.store_url,
+    consumerKey: data.access_token,
+    consumerSecret: data.refresh_token,
+  }
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+  const deliveryUrl = `${baseUrl}/api/webhooks/woocommerce?channel=${channelId}`
+
+  const meta = (data.metadata ?? {}) as Record<string, unknown>
+  const secret =
+    typeof meta.webhook_secret === "string"
+      ? meta.webhook_secret
+      : randomBytes(32).toString("hex")
+
+  const TOPICS = ["order.created", "order.updated"] as const
+  try {
+    const existing = await listWooWebhooks(creds)
+    for (const topic of TOPICS) {
+      const alreadyExists = existing.some(
+        (w) => w.topic === topic && w.delivery_url === deliveryUrl && w.status === "active",
+      )
+      if (!alreadyExists) {
+        await registerWooWebhook(creds, topic, deliveryUrl, secret)
+      }
+    }
+
+    await service
+      .from("sales_channels")
+      .update({
+        metadata: {
+          ...meta,
+          webhook_secret: secret,
+          webhook_delivery_url: deliveryUrl,
+          webhooks_registered_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", channelId)
+
+    revalidatePath(`/app/${tenantSlug}/channels/${channelId}`)
+    return { ok: true as const, deliveryUrl }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+  }
+}
 /**
  * Connect a WooCommerce store using a Consumer Key + Secret pair. We probe
  * the store with `system_status` to validate the credentials before saving.

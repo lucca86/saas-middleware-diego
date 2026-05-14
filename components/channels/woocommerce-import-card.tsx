@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Download, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { Download, AlertTriangle, CheckCircle2, Webhook } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { importWooCommerce } from "@/app/app/[tenant]/channels/actions"
+import { importWooCommerce, registerWooWebhooks } from "@/app/app/[tenant]/channels/actions"
 
 /**
  * Mirrors `ImportSummary` from `lib/channels/woocommerce-import.ts`. We
@@ -53,7 +53,9 @@ export function WooCommerceImportCard({
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  const [webhookPending, startWebhook] = useTransition()
   const [result, setResult] = useState<ImportSummary | null>(lastImportSummary)
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
 
   function trigger(force: boolean) {
     start(async () => {
@@ -67,6 +69,19 @@ export function WooCommerceImportCard({
         `Import completo: ${res.summary.imported} de ${res.summary.total} productos.` +
           (res.summary.failed > 0 ? ` ${res.summary.failed} fallaron.` : ""),
       )
+      router.refresh()
+    })
+  }
+
+  function triggerWebhooks() {
+    startWebhook(async () => {
+      const res = await registerWooWebhooks(tenantSlug, channelId)
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      setWebhookUrl(res.deliveryUrl)
+      toast.success("Webhooks registrados correctamente en WooCommerce.")
       router.refresh()
     })
   }
@@ -166,6 +181,32 @@ export function WooCommerceImportCard({
             </AlertDialogContent>
           </AlertDialog>
         )}
+        {/* Webhook registration — Sprint C */}
+        {canManage && alreadyImported ? (
+          <div className="border-t border-border pt-3">
+            <p className="text-xs font-medium text-foreground">Pedidos en tiempo real</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Registrá webhooks en WC para que los pedidos creados allí entren automáticamente en
+              Stockcurve y descuenten stock.
+            </p>
+            {webhookUrl ? (
+              <p className="mt-2 rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground break-all">
+                {webhookUrl}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 bg-transparent"
+              disabled={webhookPending}
+              onClick={triggerWebhooks}
+            >
+              <Webhook className="mr-1.5 h-4 w-4" />
+              {webhookPending ? "Registrando…" : "Registrar webhooks"}
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )
