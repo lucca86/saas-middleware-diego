@@ -229,20 +229,21 @@ export async function saveProduct(
   // Push to any mapped WooCommerce channels. Fire-and-forget; errors are
   // caught inside the pusher so they never block the SC save response.
   const { id: tenantId } = (await requireTenant(tenantSlug)).tenant
-  void pushProductToWoo(tenantId, productId, {
-    name: parsed.data.name,
-    status: parsed.data.status as "active" | "draft" | "archived",
-    description: parsed.data.description ?? undefined,
-  })
-  // Push each variant that has a WC mapping.
-  for (const v of parsed.data.variants) {
-    if (v.id) {
-      void pushVariantToWoo(tenantId, v.id, {
-        price: v.price,
-        compareAtPrice: v.compare_at_price ?? null,
-        sku: v.sku ?? null,
-        status: (v.status === "archived" ? "disabled" : v.status) as "active" | "disabled",
-      })
+  if (productId) {
+    void pushProductToWoo(tenantId, productId, {
+      name: parsed.data.name,
+      status: parsed.data.status as "active" | "draft" | "archived",
+      description: parsed.data.description ?? undefined,
+    })
+    for (const v of parsed.data.variants) {
+      if (v.id) {
+        void pushVariantToWoo(tenantId, v.id, {
+          price: v.price,
+          compareAtPrice: v.compare_at_price ?? null,
+          sku: v.sku ?? null,
+          status: (v.status === "archived" ? "disabled" : v.status) as "active" | "disabled",
+        })
+      }
     }
   }
 
