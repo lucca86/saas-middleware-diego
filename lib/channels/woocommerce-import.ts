@@ -13,7 +13,7 @@ import "server-only"
 import { createServiceClient } from "@/lib/supabase/service"
 import { slugify } from "@/lib/products/slug"
 import {
-  listProducts,
+  iterateProducts,
   fetchVariations,
   type WooCredentials,
   type WooProduct,
@@ -426,12 +426,8 @@ export async function runWooImport(opts: ImportOptions): Promise<ImportSummary> 
   })
 
   const allProducts: WooProduct[] = []
-  let page = 1
-  while (true) {
-    const batch = await listProducts(creds, page)
-    if (batch.length === 0) break
-    allProducts.push(...batch)
-    page++
+  for await (const p of iterateProducts(creds)) {
+    allProducts.push(p)
   }
 
   const total = allProducts.length
