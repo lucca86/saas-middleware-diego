@@ -1,35 +1,45 @@
+/**
+ * WooCommerce → Stockcurve importer v2
+ *
+ * Fixes vs v1:
+ * - Correct status mapping: WC "publish"→"active", "trash"→"archived", resto→"draft"
+ * - SKU deduplication: genera SKU único por variante cuando está vacío o es igual al padre
+ * - Rollback manual por producto: si falla cualquier insert posterior al product, lo borra
+ * - onProgress callback para streaming SSE
+ * - Isolation: un producto fallido no detiene el resto
+ */
+
 import "server-only"
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { randomUUID } from "node:crypto"
 import { createServiceClient } from "@/lib/supabase/service"
 import { slugify } from "@/lib/products/slug"
 import {
+  listProducts,
   fetchVariations,
-  iterateProducts,
-  type WooAttribute,
   type WooCredentials,
   type WooProduct,
   type WooVariation,
 } from "@/lib/channels/woocommerce"
 
-/**
- * WooCommerce → Stockcurve one-shot importer.
- *
- * Strategy chosen with the user:
- *  - All imported products go under a single "WooCommerce" product type per tenant.
- *  - Variant attributes accumulate on that type as they appear (Color, Talle, Material…).
- *  - Images are downloaded and re-uploaded to R2 so the storefront stays
- *    independent of the WP install.
- *  - This is the only path that pulls data from WC. After this runs once,
- *    Stockcurve becomes the source of truth — Sprint B handles SC → WC sync.
- *
- * The function is **idempotent at the variant level**: re-running it for a
- * channel with the same WC product ids will UPSERT instead of duplicating,
- * but local edits are preserved (we only INSERT new products; existing ones
- * are skipped). That's why the UI guards re-imports behind a confirmation.
- */
+// ─── Public types ─────────────────────────────────────────────────────────────
 
-export interface ImportProgress {
+export interface ImportOptions {
+  tenantId: string
+  channelId: string
+  creds: WooCredentials
+  currency: string
+  onProgress?: (event: ImportProgressEvent) => void
+}
+
+export interface ImportProgressEvent {
+  phase: "fetching" | "importing" | "done"
+  current: number
+  total: number
+  productName: string
+  status: "ok" | "skip" | "error"
+  error?: string
+}
+
+export interface ImportSummary {
   total: number
   imported: number
   skipped: number
@@ -37,471 +47,458 @@ export interface ImportProgress {
   errors: string[]
 }
 
-export interface ImportSummary extends ImportProgress {
-  channelId: string
-  startedAt: string
-  finishedAt: string
+// ─── Status mapping ───────────────────────────────────────────────────────────
+
+/** WC product status → SC product status enum */
+function mapProductStatus(wooStatus: string): "active" | "draft" | "archived" {
+  if (wooStatus === "publish") return "active"
+  if (wooStatus === "trash") return "archived"
+  return "draft"
 }
 
-interface Ctx {
-  tenantId: string
-  channelId: string
-  productTypeId: string
-  service: ReturnType<typeof createServiceClient>
-  r2: { bucket: string; client: S3Client; publicBase: string } | null
-  creds: WooCredentials
-  currency: string
+/** WC variation → SC variant status enum */
+function mapVariantStatus(v: {
+  status?: string
+  stock_status?: string
+  stock_quantity?: number | null
+  manage_stock?: boolean
+}): "active" | "disabled" {
+  if (v.status && v.status !== "publish") return "disabled"
+  if (v.stock_status === "outofstock") return "disabled"
+  return "active"
 }
 
-/** Resolves (or creates) the canonical "WooCommerce" product type for the tenant. */
+// ─── SKU resolution ───────────────────────────────────────────────────────────
+
+/**
+ * Resolve a unique SKU for a variant. Priority:
+ * 1. variation.sku if non-empty and not a duplicate of parent or already used
+ * 2. {parent_sku}-{attr_values_slug}
+ * 3. woo-{productId}-{variationId}
+ */
+function resolveVariantSku(opts: {
+  rawSku: string | null | undefined
+  parentSku: string | null
+  productId: number
+  variationId: number
+  attributes: Array<{ name: string; option?: string }>
+  usedSkus: Set<string>
+}): string | null {
+  const { rawSku, parentSku, productId, variationId, attributes, usedSkus } = opts
+
+  if (rawSku && rawSku !== parentSku && !usedSkus.has(rawSku)) {
+    usedSkus.add(rawSku)
+    return rawSku
+  }
+
+  const attrSlug = attributes
+    .map((a) => slugify(String(a.option ?? "")))
+    .filter(Boolean)
+    .join("-")
+
+  if (attrSlug) {
+    const candidate = parentSku ? `${parentSku}-${attrSlug}` : `woo-${productId}-${attrSlug}`
+    if (!usedSkus.has(candidate)) {
+      usedSkus.add(candidate)
+      return candidate
+    }
+  }
+
+  const fallback = `woo-${productId}-${variationId}`
+  usedSkus.add(fallback)
+  return fallback
+}
+
+// ─── Product type ─────────────────────────────────────────────────────────────
+
+type AttrDef = {
+  key: string
+  label: string
+  kind: "select" | "text" | "number"
+  is_variant: boolean
+  values?: string[]
+}
+
 async function ensureWooProductType(
   service: ReturnType<typeof createServiceClient>,
   tenantId: string,
+  variantAttrNames: string[],
 ): Promise<string> {
-  const slug = "woocommerce"
-  const existing = await service
+  const { data: existing } = await service
     .from("product_types")
-    .select("id")
+    .select("id, attributes")
     .eq("tenant_id", tenantId)
-    .eq("slug", slug)
+    .eq("name", "WooCommerce")
     .maybeSingle()
-  if (existing.data?.id) return existing.data.id as string
 
-  const inserted = await service
-    .from("product_types")
-    .insert({
-      tenant_id: tenantId,
-      name: "WooCommerce",
-      slug,
-      icon: "store",
-      attributes: [],
-      is_system: false,
-    })
-    .select("id")
-    .single()
-  if (inserted.error) throw new Error(`No se pudo crear el tipo WooCommerce: ${inserted.error.message}`)
-  return inserted.data.id as string
-}
-
-/**
- * Merge variant-relevant WC attributes into the product type's `attributes`
- * JSON. Each WC attribute becomes one entry with `is_variant: true` so the
- * VariantsMatrix later treats them as variant axes.
- */
-async function mergeVariantAttributesIntoType(
-  service: ReturnType<typeof createServiceClient>,
-  productTypeId: string,
-  product: WooProduct,
-) {
-  // We only care about attributes that drive variations in WC. Non-variation
-  // attributes are descriptive metadata and live in product.attributes JSON.
-  const variantAttrs = product.attributes.filter((a) => a.variation && a.options.length > 0)
-  if (variantAttrs.length === 0) return
-
-  const { data: typeRow } = await service
-    .from("product_types")
-    .select("attributes")
-    .eq("id", productTypeId)
-    .single()
-
-  type AttrDef = {
-    name: string
-    key: string
-    kind: "select" | "text" | "number"
-    is_variant: boolean
-    values?: string[]
-  }
-  const current: AttrDef[] = Array.isArray(typeRow?.attributes) ? (typeRow!.attributes as AttrDef[]) : []
+  const current: AttrDef[] = Array.isArray(existing?.attributes)
+    ? (existing!.attributes as AttrDef[])
+    : []
   const byKey = new Map(current.map((a) => [a.key, a]))
 
-  for (const attr of variantAttrs) {
-    const key = slugify(attr.name)
-    const prev = byKey.get(key)
-    const mergedValues = Array.from(
-      new Set([...(prev?.values ?? []), ...attr.options.map((o) => o.trim()).filter(Boolean)]),
-    )
-    byKey.set(key, {
-      name: attr.name,
-      key,
-      kind: "select",
-      is_variant: true,
-      values: mergedValues,
-    })
+  for (const name of variantAttrNames) {
+    const key = slugify(name)
+    if (!byKey.has(key)) {
+      byKey.set(key, { key, label: name, kind: "select", is_variant: true })
+    }
   }
 
-  await service
+  const merged = Array.from(byKey.values())
+
+  if (existing?.id) {
+    await service
+      .from("product_types")
+      .update({ attributes: merged })
+      .eq("id", existing.id)
+    return existing.id as string
+  }
+
+  const { data: created, error } = await service
     .from("product_types")
-    .update({ attributes: Array.from(byKey.values()) })
-    .eq("id", productTypeId)
+    .insert({ tenant_id: tenantId, name: "WooCommerce", attributes: merged })
+    .select("id")
+    .single()
+  if (error) throw new Error(`product_types: ${error.message}`)
+  return created.id as string
 }
 
-/** Collapse a WooProduct's variant attribute *names* selected for this product. */
-function selectedVariantAttrKeys(product: WooProduct): string[] {
-  return product.attributes
-    .filter((a) => a.variation && a.options.length > 0)
-    .map((a) => slugify(a.name))
-}
+// ─── Image download + R2 upload ───────────────────────────────────────────────
 
-/** Map a WC variation's attributes array to our `{key: value}` shape. */
-function variationAttributesToObject(
-  variation: WooVariation,
-  product: WooProduct,
-): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const va of variation.attributes) {
-    // Match against the parent product's attribute names so the keys align
-    // with what we wrote into the type definition.
-    const parent = product.attributes.find(
-      (a) => a.id === va.id || a.name.toLowerCase() === va.name.toLowerCase(),
-    )
-    const key = slugify(parent?.name ?? va.name)
-    if (key) result[key] = va.option
-  }
-  return result
-}
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"])
+const MAX_BYTES = 8 * 1024 * 1024
 
-/** Resolves the R2 client lazily; returns null if R2 isn't configured. */
-function getR2(): Ctx["r2"] {
-  const accountId = process.env.R2_ACCOUNT_ID
-  const keyId = process.env.R2_ACCESS_KEY_ID
-  const secret = process.env.R2_SECRET_ACCESS_KEY
-  const bucket = process.env.R2_BUCKET
-  const publicBase = process.env.R2_PUBLIC_URL?.replace(/\/$/, "")
-  if (!accountId || !keyId || !secret || !bucket || !publicBase) return null
-  const client = new S3Client({
+async function downloadAndUpload(src: string, tenantId: string, productId: string): Promise<string> {
+  // Lazy import so this file works without R2 env vars (falls back to src url)
+  const r2AccountId = process.env.R2_ACCOUNT_ID
+  const r2KeyId = process.env.R2_ACCESS_KEY_ID
+  const r2Secret = process.env.R2_SECRET_ACCESS_KEY
+  const r2Bucket = process.env.R2_BUCKET
+  const r2Public = process.env.R2_PUBLIC_URL?.replace(/\/$/, "")
+
+  if (!r2AccountId || !r2KeyId || !r2Secret || !r2Bucket || !r2Public) return src
+
+  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3")
+  const { randomUUID } = await import("node:crypto")
+
+  const s3 = new S3Client({
     region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId: keyId, secretAccessKey: secret },
+    endpoint: `https://${r2AccountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId: r2KeyId, secretAccessKey: r2Secret },
   })
-  return { bucket, client, publicBase }
-}
 
-const ALLOWED_MIME = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-  "image/gif",
-])
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-
-async function downloadAndUploadImage(
-  ctx: Ctx,
-  productId: string,
-  src: string,
-): Promise<{ storageKey: string; publicUrl: string; mime: string; size: number } | null> {
-  if (!ctx.r2) return null
   try {
     const res = await fetch(src, { cache: "no-store" })
-    if (!res.ok) return null
+    if (!res.ok) return src
     const mime = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase()
-    if (!ALLOWED_MIME.has(mime)) return null
-    const length = Number.parseInt(res.headers.get("content-length") ?? "0", 10)
-    if (length > MAX_IMAGE_BYTES) return null
+    if (!ALLOWED_MIME.has(mime)) return src
     const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.byteLength > MAX_IMAGE_BYTES) return null
-
-    const ext = mime.split("/")[1] === "jpeg" ? "jpg" : mime.split("/")[1]
-    const id = randomUUID()
-    const storageKey = `tenants/${ctx.tenantId}/products/${productId}/${id}.${ext}`
-
-    await ctx.r2.client.send(
+    if (buf.byteLength > MAX_BYTES) return src
+    const ext = mime.includes("jpeg") ? "jpg" : mime.split("/")[1]
+    const key = `tenants/${tenantId}/products/${productId}/${randomUUID()}.${ext}`
+    await s3.send(
       new PutObjectCommand({
-        Bucket: ctx.r2.bucket,
-        Key: storageKey,
+        Bucket: r2Bucket,
+        Key: key,
         ContentType: mime,
         ContentLength: buf.byteLength,
         Body: buf,
       }),
     )
-    return {
-      storageKey,
-      publicUrl: `${ctx.r2.publicBase}/${storageKey}`,
-      mime,
-      size: buf.byteLength,
-    }
+    return `${r2Public}/${key}`
   } catch {
-    return null
+    return src
   }
 }
 
-/** Insert a product+variants+stock for a single WC product. Returns true if created. */
-async function importOneProduct(ctx: Ctx, wc: WooProduct): Promise<boolean> {
-  const { service, tenantId, productTypeId, channelId } = ctx
+// ─── Per-product import (with manual rollback) ────────────────────────────────
 
-  // Skip if we already imported this WC product for this channel.
-  const dup = await service
-    .from("products")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .contains("attributes", { woo_id: wc.id, channel_id: channelId })
+async function importOneProduct(
+  service: ReturnType<typeof createServiceClient>,
+  opts: ImportOptions,
+  typeId: string,
+  wc: WooProduct,
+): Promise<"imported" | "skipped"> {
+  const { tenantId, channelId, creds, currency } = opts
+
+  // Idempotency: skip if already mapped
+  const { data: dup } = await service
+    .from("channel_product_mappings")
+    .select("product_id")
+    .eq("channel_id", channelId)
+    .eq("external_product_id", String(wc.id))
+    .is("external_variant_id", null)
     .maybeSingle()
-  if (dup.data?.id) return false
+  if (dup?.product_id) return "skipped"
 
-  // Update the type definition with any new variant attribute options.
-  await mergeVariantAttributesIntoType(service, productTypeId, wc)
+  // Fetch variations before any DB writes so a WC API failure doesn't leave partial data
+  const variations: WooVariation[] =
+    wc.type === "variable" ? await fetchVariations(creds, wc.id) : []
 
-  // Resolve / create category from the first WC category if any.
-  let categoryId: string | null = null
-  const firstCat = wc.categories[0]
-  if (firstCat) {
-    const catSlug = slugify(firstCat.slug || firstCat.name)
-    const existing = await service
-      .from("categories")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("slug", catSlug)
-      .maybeSingle()
-    if (existing.data?.id) {
-      categoryId = existing.data.id as string
-    } else {
-      const created = await service
-        .from("categories")
-        .insert({ tenant_id: tenantId, name: firstCat.name, slug: catSlug })
-        .select("id")
-        .single()
-      if (!created.error) categoryId = created.data.id as string
-    }
-  }
-
-  // Insert the product. We tag attributes with provenance so re-imports can
-  // detect duplicates and Sprint B (SC → WC push) can find the WC ids.
+  // ── 1. Insert product ────────────────────────────────────────────────────
   const productSlug = `${slugify(wc.slug || wc.name)}-${wc.id}`
-  const productInsert = await service
+
+  const { data: product, error: productErr } = await service
     .from("products")
     .insert({
       tenant_id: tenantId,
-      type_id: productTypeId,
-      category_id: categoryId,
-      sku: wc.sku || null,
+      type_id: typeId,
       name: wc.name,
       slug: productSlug,
       description: wc.description || wc.short_description || null,
-      status: wc.status === "publish" ? "active" : "draft",
-      tags: wc.tags.map((t) => t.name),
+      status: mapProductStatus(wc.status),
+      currency,
       attributes: {
         woo_id: wc.id,
         channel_id: channelId,
-        woo_permalink: wc.permalink,
-        variant_attribute_keys: selectedVariantAttrKeys(wc),
       },
     })
     .select("id")
     .single()
-  if (productInsert.error) throw new Error(`Producto ${wc.id}: ${productInsert.error.message}`)
-  const productId = productInsert.data.id as string
+  if (productErr) throw new Error(productErr.message)
+  const productId = product.id as string
 
-  // Build variants: simple → 1 default variant; variable → fetch variations.
-  const variantRows: Array<{
-    product_id: string
+  // Helper: delete product (cascades variants via FK) on any subsequent error
+  const rollback = () => service.from("products").delete().eq("id", productId)
+
+  // ── 2. Build + insert variants ───────────────────────────────────────────
+  const usedSkus = new Set<string>()
+  const parentSku = wc.sku || null
+
+  type VariantRow = {
     tenant_id: string
+    product_id: string
     sku: string | null
-    barcode: string | null
-    attributes: Record<string, string>
     price: number
     compare_at_price: number | null
-    cost: number | null
     stock: number
-    low_stock_threshold: number
-    weight_grams: number | null
     status: "active" | "disabled"
+    attributes: Record<string, string>
     position: number
-  }> = []
+  }
 
-  if (wc.type === "variable") {
-    const variations = await fetchVariations(ctx.creds, wc.id)
-    variations.forEach((v, idx) => {
-      const price = Number.parseFloat(v.price || v.regular_price || "0") || 0
-      const compare =
-        v.sale_price && v.regular_price && v.sale_price !== v.regular_price
-          ? Number.parseFloat(v.regular_price)
-          : null
-      const stock = v.manage_stock && v.stock_quantity != null ? v.stock_quantity : 0
-      const weightGrams = v.weight ? Math.round(Number.parseFloat(v.weight) * 1000) : null
-      variantRows.push({
-        product_id: productId,
+  let variantRows: VariantRow[]
+
+  if (wc.type === "variable" && variations.length > 0) {
+    variantRows = variations.map((v, idx) => {
+      const attrMap: Record<string, string> = {}
+      for (const a of v.attributes ?? []) attrMap[slugify(a.name)] = a.option ?? ""
+      return {
         tenant_id: tenantId,
-        sku: v.sku || null,
-        barcode: null,
-        attributes: variationAttributesToObject(v, wc),
-        price,
-        compare_at_price: compare,
-        cost: null,
-        stock,
-        low_stock_threshold: 0,
-        weight_grams: weightGrams,
-        status: v.stock_status === "outofstock" && stock === 0 ? "disabled" : "active",
+        product_id: productId,
+        sku: resolveVariantSku({
+          rawSku: v.sku,
+          parentSku,
+          productId: wc.id,
+          variationId: v.id,
+          attributes: v.attributes ?? [],
+          usedSkus,
+        }),
+        price: parseFloat(v.regular_price || v.price || "0") || 0,
+        compare_at_price:
+          v.sale_price && v.regular_price && v.sale_price !== v.regular_price
+            ? parseFloat(v.regular_price)
+            : null,
+        stock: v.manage_stock && v.stock_quantity != null ? v.stock_quantity : 0,
+        status: mapVariantStatus(v),
+        attributes: attrMap,
         position: idx,
-      })
+      }
     })
   } else {
-    // Simple / external / grouped → single default variant
-    const price = Number.parseFloat(wc.price || wc.regular_price || "0") || 0
-    const compare =
-      wc.sale_price && wc.regular_price && wc.sale_price !== wc.regular_price
-        ? Number.parseFloat(wc.regular_price)
-        : null
     const stock = wc.manage_stock && wc.stock_quantity != null ? wc.stock_quantity : 0
-    variantRows.push({
-      product_id: productId,
-      tenant_id: tenantId,
-      sku: wc.sku || null,
-      barcode: null,
-      attributes: {},
-      price,
-      compare_at_price: compare,
-      cost: null,
-      stock,
-      low_stock_threshold: 0,
-      weight_grams: wc.weight ? Math.round(Number.parseFloat(wc.weight) * 1000) : null,
-      status: wc.stock_status === "outofstock" && stock === 0 ? "disabled" : "active",
-      position: 0,
-    })
-  }
-
-  if (variantRows.length > 0) {
-    const variantsInsert = await service.from("product_variants").insert(variantRows).select("id, stock")
-    if (variantsInsert.error) throw new Error(`Variants ${wc.id}: ${variantsInsert.error.message}`)
-
-    // Seed initial stock movements.
-    const movementRows = (variantsInsert.data ?? [])
-      .map((row) => ({
+    variantRows = [
+      {
         tenant_id: tenantId,
         product_id: productId,
-        variant_id: row.id,
-        type: "in" as const,
-        qty: row.stock,
-        reason: "Import inicial desde WooCommerce",
-        reference: `wc:${wc.id}`,
-      }))
-      .filter((m) => m.qty > 0)
-    if (movementRows.length > 0) {
-      await service.from("stock_movements").insert(movementRows)
-    }
+        sku: resolveVariantSku({
+          rawSku: wc.sku,
+          parentSku,
+          productId: wc.id,
+          variationId: 0,
+          attributes: [],
+          usedSkus,
+        }),
+        price: parseFloat(wc.regular_price || wc.price || "0") || 0,
+        compare_at_price:
+          wc.sale_price && wc.regular_price && wc.sale_price !== wc.regular_price
+            ? parseFloat(wc.regular_price)
+            : null,
+        stock,
+        status: mapVariantStatus({ status: wc.status, stock_status: wc.stock_status, stock_quantity: stock, manage_stock: wc.manage_stock }),
+        attributes: {},
+        position: 0,
+      },
+    ]
+  }
 
-    // Persist channel_product_mappings so Sprint B (SC→WC push) and Sprint C
-    // (WC webhook) can look up SC ids from WC ids and vice-versa.
-    const variations = wc.type === "variable" ? await fetchVariations(ctx.creds, wc.id) : []
-    const mappingRows = (variantsInsert.data ?? []).map((row, idx) => ({
+  const { data: createdVariants, error: varErr } = await service
+    .from("product_variants")
+    .insert(variantRows)
+    .select("id, stock")
+
+  if (varErr) {
+    await rollback()
+    throw new Error(`Variants: ${varErr.message}`)
+  }
+
+  // ── 3. Seed stock movements ──────────────────────────────────────────────
+  const movements = (createdVariants ?? [])
+    .filter((v) => (v.stock ?? 0) > 0)
+    .map((v) => ({
       tenant_id: tenantId,
-      channel_id: channelId,
       product_id: productId,
-      variant_id: row.id as string,
-      external_product_id: String(wc.id),
-      external_variant_id: wc.type === "variable" ? String(variations[idx]?.id ?? "") : null,
-      sync_direction: "imported" as const,
-      last_synced_at: new Date().toISOString(),
+      variant_id: v.id as string,
+      type: "in" as const,
+      qty: v.stock as number,
+      reason: "Import inicial desde WooCommerce",
+      reference: `wc:${wc.id}`,
     }))
-    // Product-level mapping (no variant_id) for quick product lookups.
-    const productMapping = {
-      tenant_id: tenantId,
-      channel_id: channelId,
-      product_id: productId,
-      variant_id: null as string | null,
-      external_product_id: String(wc.id),
-      external_variant_id: null as string | null,
-      sync_direction: "imported" as const,
-      last_synced_at: new Date().toISOString(),
+
+  if (movements.length > 0) {
+    const { error: movErr } = await service.from("stock_movements").insert(movements)
+    if (movErr) {
+      await rollback()
+      throw new Error(`Stock movements: ${movErr.message}`)
     }
-    await service
-      .from("channel_product_mappings")
-      .upsert([productMapping, ...mappingRows], { onConflict: "channel_id,external_product_id,external_variant_id" })
   }
 
-  // Download images sequentially to avoid rate-limit spikes against the WP
-  // host. WC themes commonly cache images via a CDN, so this is fine.
-  const imageRows: Array<{
-    tenant_id: string
-    product_id: string
-    variant_id: string | null
-    storage_key: string
-    url: string
-    alt: string | null
-    position: number
-    is_primary: boolean
-    mime_type: string | null
-    size_bytes: number | null
-  }> = []
-  for (let i = 0; i < wc.images.length; i++) {
-    const img = wc.images[i]
-    const uploaded = await downloadAndUploadImage(ctx, productId, img.src)
-    if (!uploaded) continue
-    imageRows.push({
-      tenant_id: tenantId,
-      product_id: productId,
-      variant_id: null,
-      storage_key: uploaded.storageKey,
-      url: uploaded.publicUrl,
-      alt: img.alt || null,
-      position: i,
-      is_primary: i === 0,
-      mime_type: uploaded.mime,
-      size_bytes: uploaded.size,
-    })
-  }
-  if (imageRows.length > 0) {
-    await service.from("product_images").insert(imageRows)
+  // ── 4. Channel mappings ──────────────────────────────────────────────────
+  const mappingBase = {
+    tenant_id: tenantId,
+    channel_id: channelId,
+    product_id: productId,
+    external_product_id: String(wc.id),
+    sync_direction: "imported" as const,
+    last_synced_at: new Date().toISOString(),
   }
 
-  return true
-}
+  const mappingRows = [
+    { ...mappingBase, variant_id: null as string | null, external_variant_id: null as string | null },
+    ...(createdVariants ?? []).map((cv, idx) => ({
+      ...mappingBase,
+      variant_id: cv.id as string,
+      external_variant_id: wc.type === "variable" ? String(variations[idx]?.id ?? "") : null,
+    })),
+  ]
 
-export interface ImportArgs {
-  tenantId: string
-  channelId: string
-  creds: WooCredentials
-  currency: string
-}
-
-/**
- * Run the full import. Synchronous w.r.t. the caller — for very large catalogs
- * this should be moved to a background queue, but Vercel functions allow
- * up to 5 min so we ride that envelope for v1.
- */
-export async function runWooImport(args: ImportArgs): Promise<ImportSummary> {
-  const startedAt = new Date().toISOString()
-  const service = createServiceClient()
-  const productTypeId = await ensureWooProductType(service, args.tenantId)
-
-  const ctx: Ctx = {
-    tenantId: args.tenantId,
-    channelId: args.channelId,
-    productTypeId,
-    service,
-    r2: getR2(),
-    creds: args.creds,
-    currency: args.currency,
+  const { error: mapErr } = await service
+    .from("channel_product_mappings")
+    .upsert(mappingRows, { onConflict: "channel_id,external_product_id,external_variant_id" })
+  if (mapErr) {
+    await rollback()
+    throw new Error(`Mappings: ${mapErr.message}`)
   }
 
-  const progress: ImportProgress = { total: 0, imported: 0, skipped: 0, failed: 0, errors: [] }
-
-  for await (const product of iterateProducts(args.creds)) {
-    progress.total += 1
+  // ── 5. Images (fire-and-forget per image; never roll back for image failures) ─
+  const imageUrls: string[] = []
+  for (const img of (wc.images ?? []).slice(0, 8)) {
     try {
-      const created = await importOneProduct(ctx, product)
-      if (created) progress.imported += 1
-      else progress.skipped += 1
-    } catch (err) {
-      progress.failed += 1
-      const message = err instanceof Error ? err.message : String(err)
-      progress.errors.push(`#${product.id} ${product.name}: ${message}`)
+      const url = await downloadAndUpload(img.src, tenantId, productId)
+      imageUrls.push(url)
+    } catch {
+      imageUrls.push(img.src)
     }
   }
 
-  const finishedAt = new Date().toISOString()
+  if (imageUrls.length > 0) {
+    await service
+      .from("products")
+      .update({ images: imageUrls })
+      .eq("id", productId)
+  }
 
-  // Stamp the channel with the import outcome so the UI shows when it ran.
+  return "imported"
+}
+
+// ─── Main entry ───────────────────────────────────────────────────────────────
+
+export async function runWooImport(opts: ImportOptions): Promise<ImportSummary> {
+  const { tenantId, channelId, creds, onProgress } = opts
+  const service = createServiceClient()
+
+  // Phase 1: fetch all products to know the total count + collect attr names
+  onProgress?.({
+    phase: "fetching",
+    current: 0,
+    total: 0,
+    productName: "Descargando catálogo de WooCommerce…",
+    status: "ok",
+  })
+
+  const allProducts: WooProduct[] = []
+  let page = 1
+  while (true) {
+    const batch = await listProducts(creds, page)
+    if (batch.length === 0) break
+    allProducts.push(...batch)
+    page++
+  }
+
+  const total = allProducts.length
+  const summary: ImportSummary = { total, imported: 0, skipped: 0, failed: 0, errors: [] }
+
+  // Collect all variant attribute names up front so the type is pre-populated
+  const allAttrNames = new Set<string>()
+  for (const p of allProducts) {
+    for (const a of p.attributes ?? []) {
+      if (a.variation) allAttrNames.add(a.name)
+    }
+  }
+
+  const typeId = await ensureWooProductType(
+    service,
+    tenantId,
+    Array.from(allAttrNames),
+  )
+
+  // Mark channel as syncing
+  await service
+    .from("sales_channels")
+    .update({ status: "syncing", last_error: null })
+    .eq("id", channelId)
+
+  // Phase 2: import each product
+  for (let i = 0; i < allProducts.length; i++) {
+    const wc = allProducts[i]
+    try {
+      const result = await importOneProduct(service, opts, typeId, wc)
+      if (result === "skipped") {
+        summary.skipped++
+        onProgress?.({ phase: "importing", current: i + 1, total, productName: wc.name, status: "skip" })
+      } else {
+        summary.imported++
+        onProgress?.({ phase: "importing", current: i + 1, total, productName: wc.name, status: "ok" })
+      }
+    } catch (err) {
+      summary.failed++
+      const msg = `#${wc.id} ${wc.name}: ${err instanceof Error ? err.message : String(err)}`
+      summary.errors.push(msg)
+      onProgress?.({ phase: "importing", current: i + 1, total, productName: wc.name, status: "error", error: msg })
+    }
+  }
+
+  // Phase 3: persist summary on channel
+  const { data: ch } = await service.from("sales_channels").select("metadata").eq("id", channelId).single()
   await service
     .from("sales_channels")
     .update({
-      last_synced_at: finishedAt,
-      status: progress.failed === progress.total && progress.total > 0 ? "error" : "connected",
-      last_error: progress.errors.length > 0 ? progress.errors.slice(0, 3).join(" | ") : null,
+      status: summary.failed > 0 && summary.imported === 0 ? "error" : "connected",
+      last_error: summary.errors.length > 0 ? summary.errors.slice(0, 3).join(" | ") : null,
       metadata: {
-        last_import: { startedAt, finishedAt, ...progress },
+        ...((ch?.metadata as Record<string, unknown>) ?? {}),
+        last_import_at: new Date().toISOString(),
+        last_import_summary: summary,
       },
     })
-    .eq("id", args.channelId)
+    .eq("id", channelId)
 
-  return { ...progress, channelId: args.channelId, startedAt, finishedAt }
+  onProgress?.({
+    phase: "done",
+    current: total,
+    total,
+    productName: "Import completo",
+    status: summary.failed > 0 && summary.imported === 0 ? "error" : "ok",
+  })
+
+  return summary
 }
