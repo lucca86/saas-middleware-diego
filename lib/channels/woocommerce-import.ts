@@ -84,18 +84,6 @@ function mapVariantStatus(v: {
   return "active"
 }
 
-/** WC variation → SC variant status enum */
-function mapVariantStatus(v: {
-  status?: string
-  stock_status?: string
-  stock_quantity?: number | null
-  manage_stock?: boolean
-}): "active" | "disabled" {
-  if (v.status && v.status !== "publish") return "disabled"
-  if (v.stock_status === "outofstock") return "disabled"
-  return "active"
-}
-
 // ─── SKU resolution ───────────────────────────────────────────────────────────
 
 /**
