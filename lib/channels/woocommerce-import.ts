@@ -49,11 +49,39 @@ export interface ImportSummary {
 
 // ─── Status mapping ───────────────────────────────────────────────────────────
 
-/** WC product status → SC product status enum */
-function mapProductStatus(wooStatus: string): "active" | "draft" | "archived" {
-  if (wooStatus === "publish") return "active"
-  if (wooStatus === "trash") return "archived"
-  return "draft"
+/**
+ * Maps WooCommerce product status → SC products.status (active|draft|archived).
+ * WC values: publish | future | private | pending | draft | trash
+ */
+function mapProductStatus(wcStatus: string): "active" | "draft" | "archived" {
+  switch (wcStatus) {
+    case "publish":
+    case "future":
+      return "active"
+    case "trash":
+      return "archived"
+    // private | pending | draft | any unknown → draft
+    default:
+      return "draft"
+  }
+}
+
+/**
+ * Maps variation status → SC product_variants.status (active | archived).
+ * Note: "draft"/"disabled" are NOT valid for variants — only active/archived.
+ */
+function mapVariantStatus(v: {
+  status?: string
+  stock_status?: string
+  stock_quantity?: number | null
+  manage_stock?: boolean
+}): "active" | "archived" {
+  // Explicitly disabled/private/trash → archived
+  if (v.status === "trash" || v.status === "private") return "archived"
+  // Out of stock + managed stock → archived (variant exists but unavailable)
+  if (v.manage_stock && v.stock_quantity != null && v.stock_quantity <= 0) return "archived"
+  if (v.stock_status === "outofstock" && !v.manage_stock) return "archived"
+  return "active"
 }
 
 /** WC variation → SC variant status enum */
@@ -246,10 +274,10 @@ async function importOneProduct(
       slug: productSlug,
       description: wc.description || wc.short_description || null,
       status: mapProductStatus(wc.status),
-      currency,
       attributes: {
         woo_id: wc.id,
         channel_id: channelId,
+        wc_currency: currency,
       },
     })
     .select("id")
@@ -271,7 +299,7 @@ async function importOneProduct(
     price: number
     compare_at_price: number | null
     stock: number
-    status: "active" | "disabled"
+    status: "active" | "archived"
     attributes: Record<string, string>
     position: number
   }
