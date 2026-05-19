@@ -528,6 +528,7 @@ export function ProductForm({
                                 className="sr-only"
                                 checked={checked}
                                 disabled={readonly}
+                                tabIndex={-1}
                                 onChange={() => toggleValue(attr.key, opt)}
                               />
                               {opt}
