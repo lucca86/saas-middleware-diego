@@ -515,24 +515,21 @@ export function ProductForm({
                         {options.map((opt) => {
                           const checked = sel.values.includes(opt)
                           return (
-                            <label
+                            <button
                               key={opt}
-                              className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-xs transition ${
+                              type="button"
+                              role="checkbox"
+                              aria-checked={checked}
+                              disabled={readonly}
+                              onClick={() => toggleValue(attr.key, opt)}
+                              className={`inline-flex cursor-pointer items-center rounded-md border px-3 py-1.5 font-mono text-xs transition-colors ${
                                 checked
                                   ? "border-primary bg-primary/10 text-foreground"
                                   : "border-border bg-card text-muted-foreground hover:border-primary/40"
                               } ${readonly ? "pointer-events-none opacity-70" : ""}`}
                             >
-                              <input
-                                type="checkbox"
-                                className="sr-only"
-                                checked={checked}
-                                disabled={readonly}
-                                tabIndex={-1}
-                                onChange={() => toggleValue(attr.key, opt)}
-                              />
                               {opt}
-                            </label>
+                            </button>
                           )
                         })}
                       </div>
