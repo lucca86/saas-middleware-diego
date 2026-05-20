@@ -19,6 +19,7 @@ import {
   type WooProduct,
   type WooVariation,
 } from "@/lib/channels/woocommerce"
+import { writeSyncLogImport } from "@/lib/channels/sync-log"
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -510,6 +511,19 @@ export async function runWooImport(opts: ImportOptions): Promise<ImportSummary> 
     total,
     productName: "Import completo",
     status: summary.failed > 0 && summary.imported === 0 ? "error" : "ok",
+  })
+
+  // Write a single sync log entry summarising the whole import run.
+  void writeSyncLogImport({
+    tenantId,
+    channelId,
+    status: summary.failed > 0 && summary.imported === 0
+      ? "error"
+      : summary.failed > 0
+      ? "partial"
+      : "ok",
+    summary: `Import WooCommerce: ${summary.imported} importados, ${summary.skipped} omitidos, ${summary.failed} fallaron de ${summary.total}.`,
+    payload: summary as unknown as Record<string, unknown>,
   })
 
   return summary

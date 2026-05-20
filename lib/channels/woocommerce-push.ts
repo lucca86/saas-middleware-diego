@@ -19,6 +19,7 @@ import {
   updateWooStock,
   type WooCredentials,
 } from "./woocommerce"
+import { writeSyncLogPush } from "./sync-log"
 
 interface PushProductPayload {
   name?: string
@@ -94,8 +95,25 @@ export async function pushProductToWoo(
         .eq("channel_id", mapping.channel_id)
         .eq("external_product_id", mapping.external_product_id)
         .is("variant_id", null)
+      void writeSyncLogPush({
+        tenantId,
+        channelId: mapping.channel_id as string,
+        eventType: "push_product",
+        status: "ok",
+        summary: `Producto actualizado en WooCommerce (${mapping.external_product_id})`,
+        productId,
+        payload: wcPayload,
+      })
     } catch (err) {
       console.error("[v0] pushProductToWoo error:", mapping.channel_id, err)
+      void writeSyncLogPush({
+        tenantId,
+        channelId: mapping.channel_id as string,
+        eventType: "push_product",
+        status: "error",
+        summary: err instanceof Error ? err.message : String(err),
+        productId,
+      })
     }
   }
 }
@@ -152,8 +170,28 @@ export async function pushVariantToWoo(
         .eq("channel_id", mapping.channel_id)
         .eq("external_product_id", mapping.external_product_id)
         .eq("external_variant_id", mapping.external_variant_id)
+
+      void writeSyncLogPush({
+        tenantId,
+        channelId: mapping.channel_id as string,
+        eventType: payload.stock !== undefined ? "push_stock" : "push_product",
+        status: "ok",
+        summary: payload.stock !== undefined
+          ? `Stock → ${payload.stock} para variante ${mapping.external_variant_id}`
+          : `Variante ${mapping.external_variant_id} actualizada en WooCommerce`,
+        variantId,
+        payload: { ...varPayload, stock: payload.stock },
+      })
     } catch (err) {
       console.error("[v0] pushVariantToWoo error:", mapping.channel_id, variantId, err)
+      void writeSyncLogPush({
+        tenantId,
+        channelId: mapping.channel_id as string,
+        eventType: payload.stock !== undefined ? "push_stock" : "push_product",
+        status: "error",
+        summary: err instanceof Error ? err.message : String(err),
+        variantId,
+      })
     }
   }
 }

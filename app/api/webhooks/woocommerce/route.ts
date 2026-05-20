@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto"
 import { headers } from "next/headers"
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
+import { writeSyncLogWebhook } from "@/lib/channels/sync-log"
 
 /**
  * Sprint C: WooCommerce → Stockcurve webhook receiver.
@@ -83,14 +84,38 @@ export async function POST(request: Request) {
   try {
     if (topic === "order.created" || topic === "order.updated") {
       await handleOrderEvent(service, channel.tenant_id, channelId, payload)
+      void writeSyncLogWebhook({
+        tenantId: channel.tenant_id,
+        channelId,
+        eventType: "webhook_order",
+        status: "ok",
+        summary: `Pedido WC #${payload.id} (${payload.status}) recibido vía webhook.`,
+        payload: { wc_order_id: payload.id, status: payload.status, topic },
+      })
     } else if (topic === "product.updated") {
       await handleProductUpdated(service, channel.tenant_id, channelId, payload)
+      void writeSyncLogWebhook({
+        tenantId: channel.tenant_id,
+        channelId,
+        eventType: "webhook_product",
+        status: "ok",
+        summary: `Producto WC #${payload.id} actualizado vía webhook.`,
+        payload: { wc_product_id: payload.id, topic },
+      })
     } else {
       // Unknown topic — acknowledge silently so WC doesn't disable the webhook.
       console.log("[v0] WC webhook: unhandled topic", topic)
     }
   } catch (err) {
     console.error("[v0] WC webhook handler error:", err)
+    void writeSyncLogWebhook({
+      tenantId: channel.tenant_id,
+      channelId,
+      eventType: topic.startsWith("order") ? "webhook_order" : "webhook_product",
+      status: "error",
+      summary: err instanceof Error ? err.message : String(err),
+      payload: { topic, wc_id: payload.id },
+    })
     // Return 200 to WC so it doesn't retry. We log the error for debugging.
   }
 

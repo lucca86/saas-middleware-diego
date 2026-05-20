@@ -1,12 +1,13 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft, CheckCircle2, ExternalLink } from "lucide-react"
+import { ArrowLeft, CheckCircle2, ExternalLink, History } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { getChannel } from "@/lib/channels/queries"
 import { ChannelDetailClient } from "@/components/channels/channel-detail-client"
 import { WooCommerceImportCard } from "@/components/channels/woocommerce-import-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 const PROVIDER_LABEL: Record<string, string> = {
   tiendanube: "Tienda Nube",
@@ -82,6 +83,12 @@ export default async function ChannelDetailPage({
           {channel.status === "connected" ? <CheckCircle2 className="mr-1 h-3 w-3" /> : null}
           {STATUS_LABEL[channel.status] ?? channel.status}
         </Badge>
+        <Button variant="outline" size="sm" asChild className="bg-transparent">
+          <Link href={`/app/${slug}/channels/${id}/sync-log`}>
+            <History className="mr-1.5 h-4 w-4" />
+            Log de sync
+          </Link>
+        </Button>
       </header>
 
       {connected ? (
@@ -190,7 +197,7 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/40 py-1.5 last:border-0">
       <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="text-right text-sm text-foreground">{value || "—"}</span>
+      <span className="text-right text-sm text-foreground">{value || "���"}</span>
     </div>
   )
 }
