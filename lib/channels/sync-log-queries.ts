@@ -43,7 +43,13 @@ export async function getSyncLogs(
   if (error) throw error
 
   return {
-    rows: (data ?? []) as SyncLogEntry[],
+    rows: (data ?? []).map((row) => ({
+      ...row,
+      // Supabase returns foreign-key joins as arrays even for single rows.
+      product: Array.isArray(row.product)
+        ? (row.product[0] ?? null)
+        : (row.product ?? null),
+    })) as SyncLogEntry[],
     total: count ?? 0,
   }
 }
