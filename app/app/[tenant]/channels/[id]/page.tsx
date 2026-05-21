@@ -197,7 +197,7 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/40 py-1.5 last:border-0">
       <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="text-right text-sm text-foreground">{value || "���"}</span>
+      <span className="text-right text-sm text-foreground">{value || "—"}</span>
     </div>
   )
 }
