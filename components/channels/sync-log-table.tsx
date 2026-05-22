@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -11,94 +12,66 @@ import {
   SkipForward,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Package,
   ShoppingCart,
   Webhook,
   RefreshCw,
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { SyncLogEntry } from "@/lib/channels/sync-log-queries"
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
+// ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
   ok: {
     icon: CheckCircle2,
     label: "OK",
-    className: "border-tertiary/30 bg-tertiary/10 text-tertiary",
+    badge: "border-tertiary/30 bg-tertiary/10 text-tertiary",
+    row: "",
   },
   partial: {
     icon: AlertTriangle,
     label: "Parcial",
-    className: "border-yellow-500/30 bg-yellow-500/10 text-yellow-600",
+    badge: "border-yellow-500/30 bg-yellow-500/10 text-yellow-600",
+    row: "bg-yellow-500/5",
   },
   error: {
     icon: XCircle,
     label: "Error",
-    className: "border-destructive/30 bg-destructive/10 text-destructive",
+    badge: "border-destructive/30 bg-destructive/10 text-destructive",
+    row: "bg-destructive/5",
   },
   skipped: {
     icon: SkipForward,
     label: "Omitido",
-    className: "border-border bg-muted text-muted-foreground",
+    badge: "border-border bg-muted text-muted-foreground",
+    row: "",
   },
 } as const
 
-// ─── Event type label + icon ──────────────────────────────────────────────────
+// ─── Event config ─────────────────────────────────────────────────────────────
 
-const EVENT_CONFIG: Record<
-  string,
-  { label: string; icon: React.ElementType; dirIcon: React.ElementType }
-> = {
-  import: {
-    label: "Import WC → SC",
-    icon: ArrowDownToLine,
-    dirIcon: ArrowDownToLine,
-  },
-  push_product: {
-    label: "Push producto",
-    icon: Package,
-    dirIcon: ArrowUpFromLine,
-  },
-  push_stock: {
-    label: "Push stock",
-    icon: Package,
-    dirIcon: ArrowUpFromLine,
-  },
-  webhook_order: {
-    label: "Pedido webhook",
-    icon: ShoppingCart,
-    dirIcon: ArrowDownToLine,
-  },
-  webhook_product: {
-    label: "Producto webhook",
-    icon: Webhook,
-    dirIcon: ArrowDownToLine,
-  },
-  connect: {
-    label: "Conexión",
-    icon: RefreshCw,
-    dirIcon: ArrowDownToLine,
-  },
-  error: {
-    label: "Error",
-    icon: XCircle,
-    dirIcon: ArrowDownToLine,
-  },
+const EVENT_CONFIG: Record<string, { label: string; Icon: React.ElementType; dir: string }> = {
+  import: { label: "Import WC → SC", Icon: ArrowDownToLine, dir: "WC → SC" },
+  push_product: { label: "Push producto", Icon: Package, dir: "SC → WC" },
+  push_stock: { label: "Push stock", Icon: Package, dir: "SC → WC" },
+  webhook_order: { label: "Pedido webhook", Icon: ShoppingCart, dir: "WC → SC" },
+  webhook_product: { label: "Producto webhook", Icon: Webhook, dir: "WC → SC" },
+  connect: { label: "Conexión", Icon: RefreshCw, dir: "—" },
+  error: { label: "Error", Icon: XCircle, dir: "—" },
 }
-
-// ─── Filter tabs ──────────────────────────────────────────────────────────────
 
 const FILTERS = [
   { value: null, label: "Todos" },
   { value: "ok", label: "OK" },
   { value: "partial", label: "Parciales" },
   { value: "error", label: "Errores" },
-]
+] as const
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
   rows: SyncLogEntry[]
@@ -121,6 +94,7 @@ export function SyncLogTable({
 }: Props) {
   const router = useRouter()
   const base = `/app/${tenantSlug}/channels/${channelId}/sync-log`
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   function buildHref(p: number, s: string | null) {
     const params = new URLSearchParams()
@@ -130,28 +104,40 @@ export function SyncLogTable({
     return qs ? `${base}?${qs}` : base
   }
 
+  // Stat counts based on ALL rows in current page (server already filtered by status).
+  const counts = {
+    ok: rows.filter((r) => r.status === "ok").length,
+    partial: rows.filter((r) => r.status === "partial").length,
+    error: rows.filter((r) => r.status === "error").length,
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Stats row */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {FILTERS.slice(1).map((f) => {
-          const count = rows.filter((r) => f.value === null || r.status === f.value).length
-          const cfg = STATUS_CONFIG[f.value as keyof typeof STATUS_CONFIG]
-          const Icon = cfg?.icon ?? CheckCircle2
+    <div className="flex flex-col gap-6">
+      {/* ── Stat cards ── */}
+      <div className="grid grid-cols-3 gap-3">
+        {(["ok", "partial", "error"] as const).map((s) => {
+          const cfg = STATUS_CONFIG[s]
+          const Icon = cfg.icon
           return (
-            <Link key={f.value} href={buildHref(1, f.value)}>
+            <Link key={s} href={buildHref(1, s)}>
               <Card
                 className={`cursor-pointer transition-colors hover:border-primary/40 ${
-                  activeStatus === f.value ? "border-primary/60 bg-primary/5" : ""
+                  activeStatus === s ? "border-primary/60 bg-primary/5" : ""
                 }`}
               >
-                <CardContent className="flex items-center gap-3 p-4">
-                  <Icon className={`h-5 w-5 ${cfg?.className?.includes("text-") ? cfg.className.split(" ").find((c) => c.startsWith("text-")) : "text-muted-foreground"}`} />
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${cfg.badge}`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
                   <div>
-                    <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {f.label}
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {s === "ok" ? "OK" : s === "partial" ? "Parciales" : "Errores"}
                     </p>
-                    <p className="text-xl font-bold tabular-nums text-foreground">{count}</p>
+                    <p className="text-2xl font-bold tabular-nums text-foreground">
+                      {counts[s]}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -160,7 +146,7 @@ export function SyncLogTable({
         })}
       </div>
 
-      {/* Filter tabs */}
+      {/* ── Filter tabs ── */}
       <div className="flex items-center gap-1 border-b border-border pb-2">
         {FILTERS.map((f) => (
           <Link
@@ -180,12 +166,12 @@ export function SyncLogTable({
         </span>
       </div>
 
-      {/* Table */}
+      {/* ── Table ── */}
       {rows.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
             <RefreshCw className="h-8 w-8 opacity-30" />
-            <p className="text-sm">No hay eventos de sincronización registrados todavía.</p>
+            <p className="text-sm">No hay eventos de sincronización registrados.</p>
             <p className="text-xs">
               Los eventos aparecen aquí cada vez que se importa, se hace push de un producto, o
               llega un webhook de WooCommerce.
@@ -194,45 +180,79 @@ export function SyncLogTable({
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Evento
-                  </th>
-                  <th className="hidden px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground sm:table-cell">
-                    Dirección
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Estado
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Resumen
-                  </th>
-                  <th className="hidden px-4 py-2.5 text-right font-mono text-[10px] uppercase tracking-wide text-muted-foreground md:table-cell">
-                    Fecha
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {rows.map((row) => {
-                  const evtCfg = EVENT_CONFIG[row.event_type] ?? EVENT_CONFIG.error
-                  const EvtIcon = evtCfg.icon
-                  const DirIcon = evtCfg.dirIcon
-                  const stCfg = STATUS_CONFIG[row.status]
-                  const StIcon = stCfg.icon
-                  const isError = row.status === "error"
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="w-8 px-3 py-2.5" />
+                <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Evento
+                </th>
+                <th className="hidden px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground sm:table-cell">
+                  Dirección
+                </th>
+                <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Estado
+                </th>
+                <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Resumen
+                </th>
+                <th className="hidden px-4 py-2.5 text-right font-mono text-[10px] uppercase tracking-wide text-muted-foreground md:table-cell">
+                  Fecha
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {rows.map((row) => {
+                const evtCfg = EVENT_CONFIG[row.event_type] ?? EVENT_CONFIG.error
+                const { Icon } = evtCfg
+                const stCfg = STATUS_CONFIG[row.status]
+                const StIcon = stCfg.icon
+                const isOpen = expanded === row.id
+                const hasDetail =
+                  row.status !== "ok" &&
+                  row.payload &&
+                  Object.keys(row.payload).length > 0
 
-                  return (
+                // Extract errors array and counts from payload for a nicer display.
+                const payload = row.payload as Record<string, unknown>
+                const errorList = Array.isArray(payload?.errors)
+                  ? (payload.errors as string[])
+                  : []
+                const summaryStats = [
+                  payload?.total != null && `Total: ${payload.total}`,
+                  payload?.imported != null && `Importados: ${payload.imported}`,
+                  payload?.skipped != null && `Omitidos: ${payload.skipped}`,
+                  payload?.failed != null && `Fallaron: ${payload.failed}`,
+                ]
+                  .filter(Boolean)
+                  .join("  ·  ")
+
+                return (
+                  <>
                     <tr
                       key={row.id}
-                      className={`transition-colors hover:bg-muted/20 ${isError ? "bg-destructive/5" : ""}`}
+                      className={`transition-colors hover:bg-muted/20 ${stCfg.row}`}
                     >
-                      {/* Event type */}
+                      {/* Expand toggle */}
+                      <td className="px-3 py-3">
+                        {hasDetail ? (
+                          <button
+                            type="button"
+                            onClick={() => setExpanded(isOpen ? null : row.id)}
+                            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                            aria-label={isOpen ? "Colapsar detalle" : "Expandir detalle"}
+                          >
+                            <ChevronDown
+                              className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                        ) : null}
+                      </td>
+
+                      {/* Event */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <EvtIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="font-medium text-foreground">{evtCfg.label}</span>
                         </div>
                         {row.product?.name ? (
@@ -244,37 +264,30 @@ export function SyncLogTable({
 
                       {/* Direction */}
                       <td className="hidden px-4 py-3 sm:table-cell">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <DirIcon className="h-3.5 w-3.5" />
-                          <span className="font-mono text-[10px]">
-                            {row.direction === "sc_to_channel" ? "SC → WC" : "WC → SC"}
-                          </span>
-                        </div>
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {evtCfg.dir}
+                        </span>
                       </td>
 
                       {/* Status */}
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className={`gap-1 ${stCfg.className}`}>
+                        <Badge variant="outline" className={`gap-1 ${stCfg.badge}`}>
                           <StIcon className="h-3 w-3" />
                           {stCfg.label}
                         </Badge>
                       </td>
 
-                      {/* Summary */}
-                      <td className="max-w-xs px-4 py-3">
-                        <p className="line-clamp-2 text-xs text-muted-foreground">
-                          {row.summary ?? "—"}
-                        </p>
-                        {/* Show error payload details if error */}
-                        {isError && row.payload && Object.keys(row.payload).length > 0 ? (
-                          <details className="mt-1">
-                            <summary className="cursor-pointer font-mono text-[10px] text-destructive hover:underline">
-                              Ver detalle
-                            </summary>
-                            <pre className="mt-1 max-h-24 overflow-auto rounded bg-destructive/5 p-1.5 font-mono text-[10px] text-destructive">
-                              {JSON.stringify(row.payload, null, 2)}
-                            </pre>
-                          </details>
+                      {/* Summary (short) */}
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-muted-foreground">{row.summary ?? "—"}</p>
+                        {hasDetail && !isOpen ? (
+                          <button
+                            type="button"
+                            onClick={() => setExpanded(row.id)}
+                            className="mt-0.5 font-mono text-[10px] text-primary hover:underline"
+                          >
+                            Ver detalle
+                          </button>
                         ) : null}
                       </td>
 
@@ -283,15 +296,70 @@ export function SyncLogTable({
                         <ClientDate iso={row.created_at} />
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                    {/* ── Expanded detail row — full width ── */}
+                    {isOpen && hasDetail ? (
+                      <tr key={`${row.id}-detail`} className={stCfg.row}>
+                        <td colSpan={6} className="px-4 pb-4 pt-0">
+                          <div className="ml-6 rounded-lg border border-border bg-card p-4">
+                            {/* Stats row if import */}
+                            {summaryStats ? (
+                              <p className="mb-3 font-mono text-xs text-muted-foreground">
+                                {summaryStats}
+                              </p>
+                            ) : null}
+
+                            {/* Error list */}
+                            {errorList.length > 0 ? (
+                              <div>
+                                <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-destructive">
+                                  Errores ({errorList.length})
+                                </p>
+                                <ul className="flex flex-col gap-1.5">
+                                  {errorList.map((msg, i) => (
+                                    <li
+                                      key={i}
+                                      className="flex gap-2 rounded-md bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive"
+                                    >
+                                      <XCircle className="mt-px h-3.5 w-3.5 shrink-0 opacity-70" />
+                                      <span className="break-all leading-relaxed">{msg}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : (
+                              /* Fallback: render remaining payload keys excluding errors/counts */
+                              <div>
+                                <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                                  Payload
+                                </p>
+                                <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 font-mono text-[11px] text-muted-foreground leading-relaxed">
+                                  {JSON.stringify(
+                                    Object.fromEntries(
+                                      Object.entries(payload).filter(
+                                        ([k]) =>
+                                          !["total", "imported", "skipped", "failed", "errors"].includes(k),
+                                      ),
+                                    ),
+                                    null,
+                                    2,
+                                  )}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
         </Card>
       )}
 
-      {/* Pagination */}
+      {/* ── Pagination ── */}
       {totalPages > 1 ? (
         <div className="flex items-center justify-between">
           <p className="font-mono text-xs text-muted-foreground">
@@ -323,13 +391,9 @@ export function SyncLogTable({
   )
 }
 
-/** Renders the date client-side to avoid hydration mismatches with TZ. */
 function ClientDate({ iso }: { iso: string }) {
   return (
-    <span
-      suppressHydrationWarning
-      className="font-mono text-[11px] text-muted-foreground"
-    >
+    <span suppressHydrationWarning className="font-mono text-[11px] text-muted-foreground">
       {typeof window === "undefined"
         ? iso
         : new Intl.DateTimeFormat("es-AR", {
