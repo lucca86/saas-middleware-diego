@@ -5,6 +5,7 @@ import { requireTenant } from "@/lib/tenant/context"
 import { getChannel } from "@/lib/channels/queries"
 import { ChannelDetailClient } from "@/components/channels/channel-detail-client"
 import { WooCommerceImportCard } from "@/components/channels/woocommerce-import-card"
+import { TiendaNubeImportCard } from "@/components/channels/tiendanube-import-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -170,6 +171,24 @@ export default async function ChannelDetailPage({
           canManage={canManage}
           lastImportAt={
             typeof meta.last_import_at === "string" ? (meta.last_import_at as string) : null
+          }
+          lastImportSummary={
+            (meta.last_import_summary as {
+              total: number
+              imported: number
+              skipped: number
+              failed: number
+              errors: string[]
+            } | null) ?? null
+          }
+        />
+      ) : channel.provider === "tiendanube" ? (
+        <TiendaNubeImportCard
+          tenantSlug={slug}
+          channelId={channel.id}
+          canManage={canManage}
+          lastImportAt={
+            typeof meta.last_import === "string" ? (meta.last_import as string) : null
           }
           lastImportSummary={
             (meta.last_import_summary as {

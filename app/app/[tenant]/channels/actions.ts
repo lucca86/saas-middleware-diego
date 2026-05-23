@@ -6,7 +6,13 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { requireTenant } from "@/lib/tenant/context"
-import { buildAuthorizeUrl, fetchStore, tiendaNubeIsConfigured } from "@/lib/channels/tiendanube"
+import {
+  buildAuthorizeUrl,
+  fetchStore,
+  tiendaNubeIsConfigured,
+  registerTiendaNubeWebhook,
+  listTiendaNubeWebhooks,
+} from "@/lib/channels/tiendanube"
 import {
   fetchStoreInfo,
   wooIsValidStoreUrl,
@@ -15,6 +21,7 @@ import {
   type WooCredentials,
 } from "@/lib/channels/woocommerce"
 import { runWooImport } from "@/lib/channels/woocommerce-import"
+import { runTiendaNubeImport } from "@/lib/channels/tiendanube-import"
 
 /**
  * Kick off the Tienda Nube OAuth install flow. Stores a CSRF state row keyed
@@ -369,5 +376,128 @@ export async function importWooCommerce(
       .update({ status: "error", last_error: message })
       .eq("id", channelId)
     return { ok: false as const, error: message }
+  }
+}
+
+/**
+ * Trigger a one-shot TiendaNube → Stockcurve import for a connected channel.
+ * The SSE endpoint at /api/channels/tiendanube/import is the streaming version;
+ * this action is the non-streaming fallback for server-side use.
+ */
+export async function importTiendaNube(
+  tenantSlug: string,
+  channelId: string,
+  opts: { force?: boolean } = {},
+) {
+  const { tenant, role } = await requireTenant(tenantSlug)
+  if (!["owner", "admin"].includes(role)) {
+    return { ok: false as const, error: "Solo owner/admin pueden importar." }
+  }
+
+  const service = createServiceClient()
+  const { data, error } = await service
+    .from("sales_channels")
+    .select("id, provider, external_id, access_token, currency, metadata, status")
+    .eq("id", channelId)
+    .eq("tenant_id", tenant.id)
+    .maybeSingle()
+  if (error || !data) return { ok: false as const, error: "Canal no encontrado." }
+  if (data.provider !== "tiendanube") {
+    return { ok: false as const, error: "Este canal no es Tienda Nube." }
+  }
+  if (!data.access_token || !data.external_id) {
+    return { ok: false as const, error: "Faltan credenciales. Reconectá el canal." }
+  }
+  const meta = (data.metadata ?? {}) as Record<string, unknown>
+  if (meta.last_import && !opts.force) {
+    return {
+      ok: false as const,
+      error: "Ya importaste antes. Pasá force=true para ejecutar de nuevo.",
+    }
+  }
+
+  try {
+    const summary = await runTiendaNubeImport({
+      tenantId: tenant.id,
+      channelId,
+      storeId: data.external_id as string,
+      accessToken: data.access_token as string,
+      currency: data.currency ?? "ARS",
+    })
+    revalidatePath(`/app/${tenantSlug}/channels`)
+    revalidatePath(`/app/${tenantSlug}/channels/${channelId}`)
+    revalidatePath(`/app/${tenantSlug}/products`)
+    return { ok: true as const, summary }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    await service
+      .from("sales_channels")
+      .update({ status: "error", last_error: message })
+      .eq("id", channelId)
+    return { ok: false as const, error: message }
+  }
+}
+
+/**
+ * Register TiendaNube webhooks for order and product events.
+ * Idempotent: skips topics already registered to our delivery URL.
+ */
+export async function registerTiendaNubeWebhooks(tenantSlug: string, channelId: string) {
+  const { tenant, role } = await requireTenant(tenantSlug)
+  if (!["owner", "admin"].includes(role)) {
+    return { ok: false as const, error: "Solo owner/admin pueden registrar webhooks." }
+  }
+
+  const service = createServiceClient()
+  const { data, error } = await service
+    .from("sales_channels")
+    .select("id, provider, external_id, access_token, metadata")
+    .eq("id", channelId)
+    .eq("tenant_id", tenant.id)
+    .maybeSingle()
+  if (error || !data) return { ok: false as const, error: "Canal no encontrado." }
+  if (data.provider !== "tiendanube") return { ok: false as const, error: "No es Tienda Nube." }
+  if (!data.access_token || !data.external_id) {
+    return { ok: false as const, error: "Faltan credenciales." }
+  }
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+  const deliveryUrl = `${baseUrl}/api/webhooks/tiendanube?channel=${channelId}`
+
+  const EVENTS = [
+    "order/created",
+    "order/updated",
+    "order/paid",
+    "product/updated",
+    "product/deleted",
+  ] as const
+
+  try {
+    const existing = await listTiendaNubeWebhooks(data.external_id, data.access_token)
+    for (const event of EVENTS) {
+      const alreadyExists = existing.some((w) => w.event === event && w.url === deliveryUrl)
+      if (!alreadyExists) {
+        await registerTiendaNubeWebhook(data.external_id, data.access_token, event, deliveryUrl)
+      }
+    }
+
+    const meta = (data.metadata ?? {}) as Record<string, unknown>
+    await service
+      .from("sales_channels")
+      .update({
+        metadata: {
+          ...meta,
+          webhook_delivery_url: deliveryUrl,
+          webhooks_registered_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", channelId)
+
+    revalidatePath(`/app/${tenantSlug}/channels/${channelId}`)
+    return { ok: true as const, deliveryUrl }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
   }
 }

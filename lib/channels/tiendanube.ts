@@ -174,3 +174,241 @@ export function pickLocalized(value: Record<string, string> | string | undefined
   if (typeof value === "string") return value
   return value[lang] ?? value.es ?? value.en ?? Object.values(value)[0] ?? ""
 }
+
+// ─── Product types ─────────────────────────────────────────────────────────────
+
+export interface TiendaNubeVariantValue {
+  id: number
+  name: string
+  slug?: string
+}
+
+export interface TiendaNubeVariant {
+  id: number
+  product_id: number
+  price: string
+  compare_at_price: string | null
+  promotional_price: string | null
+  stock_management: boolean
+  stock: number | null
+  sku: string | null
+  barcode: string | null
+  weight: string | null
+  depth: string | null
+  height: string | null
+  width: string | null
+  values: TiendaNubeVariantValue[]
+  image_id: number | null
+  created_at: string
+  updated_at: string
+  inventory_levels?: Array<{ id: number; variant_id: number; location_id: number; stock: number }>
+}
+
+export interface TiendaNubeImage {
+  id: number
+  product_id: number
+  src: string
+  position: number
+  alt: Record<string, string> | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TiendaNubeAttribute {
+  id: number
+  name: Record<string, string>
+  values: Array<{ id: number; name: Record<string, string> }>
+}
+
+export interface TiendaNubeProduct {
+  id: number
+  name: Record<string, string> | string
+  description: Record<string, string> | string | null
+  handle: Record<string, string> | string | null
+  variants: TiendaNubeVariant[]
+  images: TiendaNubeImage[]
+  attributes: TiendaNubeAttribute[]
+  categories: Array<{ id: number; name: Record<string, string> }>
+  brand: string | null
+  seo_title: Record<string, string> | string | null
+  published: boolean
+  free_shipping: boolean
+  requires_shipping: boolean
+  canonical_url: string | null
+  tags: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TiendaNubeProductsResponse {
+  data: TiendaNubeProduct[]
+  total: number
+}
+
+/**
+ * Paginated product fetch. TN uses `Link: <...>; rel="next"` headers or
+ * `x-total-count` / `x-total-pages`. We iterate by page until exhausted.
+ */
+export async function* iterateTiendaNubeProducts(
+  storeId: string | number,
+  accessToken: string,
+  perPage = 200,
+): AsyncGenerator<TiendaNubeProduct> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  let page = 1
+
+  while (true) {
+    const url = `${API_BASE}/${storeId}/products?per_page=${perPage}&page=${page}&fields=id,name,description,handle,variants,images,attributes,categories,brand,published,tags,created_at,updated_at`
+    const res = await fetch(url, {
+      headers: {
+        Authentication: `bearer ${accessToken}`,
+        "User-Agent": userAgent,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    })
+
+    if (!res.ok) {
+      const body = await res.text()
+      throw new TiendaNubeError(`GET /products page ${page}: ${res.status}`, res.status, body)
+    }
+
+    const products: TiendaNubeProduct[] = await res.json()
+    if (!Array.isArray(products) || products.length === 0) break
+
+    for (const p of products) yield p
+
+    // TN returns fewer items than perPage when on the last page.
+    if (products.length < perPage) break
+    page++
+  }
+}
+
+/**
+ * Get total product count for progress calculation.
+ * Uses `x-total-count` header from a HEAD request or first page fetch.
+ */
+export async function getTiendaNubeProductCount(
+  storeId: string | number,
+  accessToken: string,
+): Promise<number> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const url = `${API_BASE}/${storeId}/products?per_page=1&page=1`
+  const res = await fetch(url, {
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+  if (!res.ok) return 0
+  const total = res.headers.get("x-total-count")
+  if (total) return parseInt(total, 10)
+  // Fallback: count from body
+  const body: TiendaNubeProduct[] = await res.json()
+  return body.length
+}
+
+// ─── Mutation helpers (Sprint C) ───────────────────────────────────────────────
+
+/** Update top-level product fields. */
+export async function updateTiendaNubeProduct(
+  storeId: string | number,
+  productId: number,
+  accessToken: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const url = `${API_BASE}/${storeId}/products/${productId}`
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(data),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new TiendaNubeError(`PUT /products/${productId}: ${res.status}`, res.status, body)
+  }
+}
+
+/** Update a specific variant (price, SKU, stock). */
+export async function updateTiendaNubeVariant(
+  storeId: string | number,
+  productId: number,
+  variantId: number,
+  accessToken: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const url = `${API_BASE}/${storeId}/products/${productId}/variants/${variantId}`
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(data),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new TiendaNubeError(
+      `PUT /products/${productId}/variants/${variantId}: ${res.status}`,
+      res.status,
+      body,
+    )
+  }
+}
+
+/** Register a webhook on the store. */
+export async function registerTiendaNubeWebhook(
+  storeId: string | number,
+  accessToken: string,
+  event: string,
+  url: string,
+): Promise<{ id: number }> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const res = await fetch(`${API_BASE}/${storeId}/webhooks`, {
+    method: "POST",
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ event, url }),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new TiendaNubeError(`POST /webhooks (${event}): ${res.status}`, res.status, body)
+  }
+  return res.json()
+}
+
+/** List existing webhooks. */
+export async function listTiendaNubeWebhooks(
+  storeId: string | number,
+  accessToken: string,
+): Promise<Array<{ id: number; event: string; url: string }>> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const res = await fetch(`${API_BASE}/${storeId}/webhooks`, {
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+  if (!res.ok) return []
+  return res.json()
+}
