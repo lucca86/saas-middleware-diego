@@ -378,6 +378,34 @@ export async function updateTiendaNubeVariant(
   }
 }
 
+/**
+ * Create a new product in TiendaNube.
+ * Returns the created product with its variants (needed to store mappings).
+ */
+export async function createTiendaNubeProduct(
+  storeId: string | number,
+  accessToken: string,
+  data: Record<string, unknown>,
+): Promise<TiendaNubeProduct> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const res = await fetch(`${API_BASE}/${storeId}/products`, {
+    method: "POST",
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(data),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new TiendaNubeError(`POST /products: ${res.status}`, res.status, body)
+  }
+  return res.json()
+}
+
 /** Register a webhook on the store. */
 export async function registerTiendaNubeWebhook(
   storeId: string | number,

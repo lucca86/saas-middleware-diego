@@ -186,6 +186,7 @@ export default async function ChannelDetailPage({
         <TiendaNubeImportCard
           tenantSlug={slug}
           channelId={channel.id}
+          tenantId={tenant.id}
           canManage={canManage}
           lastImportAt={
             typeof meta.last_import === "string" ? (meta.last_import as string) : null
@@ -194,6 +195,19 @@ export default async function ChannelDetailPage({
             (meta.last_import_summary as {
               total: number
               imported: number
+              skipped: number
+              failed: number
+              errors: string[]
+            } | null) ?? null
+          }
+          lastExportAt={
+            typeof meta.last_export === "string" ? (meta.last_export as string) : null
+          }
+          lastExportSummary={
+            (meta.last_export_summary as {
+              total: number
+              created: number
+              updated: number
               skipped: number
               failed: number
               errors: string[]
