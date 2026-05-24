@@ -145,7 +145,7 @@ async function handleOrderEvent(
   const lineItems = (tn.products as unknown[]) ?? []
   let total = Number(tn.total ?? 0)
   if (!total) {
-    total = lineItems.reduce((sum, item) => {
+    total = lineItems.reduce((sum: number, item) => {
       const i = item as Record<string, unknown>
       return sum + Number(i.total_price ?? Number(i.price ?? 0) * Number(i.quantity ?? 1))
     }, 0)

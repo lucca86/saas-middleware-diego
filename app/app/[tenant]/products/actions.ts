@@ -8,7 +8,10 @@ import { requireTenant } from "@/lib/tenant/context"
 import { slugify } from "@/lib/products/slug"
 import { variantKey } from "@/lib/products/cartesian"
 import { pushProductToWoo, pushVariantToWoo } from "@/lib/channels/woocommerce-push"
-import { pushProductToTN, pushVariantToTN } from "@/lib/channels/tiendanube-push"
+import {
+  pushProductToTiendaNube,
+  pushVariantToTiendaNube,
+} from "@/lib/channels/tiendanube-push"
 
 const variantInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -237,7 +240,7 @@ export async function saveProduct(
       description: parsed.data.description ?? undefined,
     }
     void pushProductToWoo(tenantId, productId, pushPayload)
-    void pushProductToTN(tenantId, productId, pushPayload)
+    void pushProductToTiendaNube(tenantId, productId, pushPayload)
 
     for (const v of parsed.data.variants) {
       if (v.id) {
@@ -248,7 +251,7 @@ export async function saveProduct(
           status: (v.status === "archived" ? "disabled" : v.status) as "active" | "disabled",
         }
         void pushVariantToWoo(tenantId, v.id, varPayload)
-        void pushVariantToTN(tenantId, v.id, varPayload)
+        void pushVariantToTiendaNube(tenantId, v.id, varPayload)
       }
     }
   }

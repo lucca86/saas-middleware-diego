@@ -191,3 +191,15 @@ export async function pushVariantToTiendaNube(
     }
   }
 }
+
+/**
+ * Convenience wrapper: push a stock quantity to TN for a given SC variant.
+ * This is called from stock/actions.ts after recording a stock movement.
+ */
+export async function pushStockToTiendaNube(
+  tenantId: string,
+  variantId: string,
+  newStock: number,
+): Promise<void> {
+  return pushVariantToTiendaNube(tenantId, variantId, { stock: newStock })
+}
