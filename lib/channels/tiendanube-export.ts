@@ -63,6 +63,9 @@ export async function runTiendaNubeExport(
       id, name, description, status, attributes,
       product_variants (
         id, sku, price, compare_at_price, stock, status, attributes
+      ),
+      product_images (
+        url, position, alt, is_primary
       )
     `)
     .eq("tenant_id", tenantId)
@@ -112,6 +115,15 @@ export async function runTiendaNubeExport(
       attributes: Record<string, string[]> | null
     }>
 
+    const images = ((product.product_images ?? []) as Array<{
+      url: string
+      position: number
+      alt: string | null
+      is_primary: boolean
+    }>)
+      .filter((img) => img.url)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+
     // ── Determine attribute structure ─────────────────────────────────────
     // Collect unique attribute keys across all variants to build TN attributes array.
     const attrKeys = new Set<string>()
@@ -145,6 +157,10 @@ export async function runTiendaNubeExport(
       published: product.status === "active",
       attributes,
       variants: tnVariants,
+      // TN accepts images as array of { src } objects, sorted by position.
+      ...(images.length > 0 && {
+        images: images.map((img) => ({ src: img.url })),
+      }),
     }
 
     try {
@@ -162,6 +178,9 @@ export async function runTiendaNubeExport(
               name: tnPayload.name,
               description: tnPayload.description,
               published: tnPayload.published,
+              ...(images.length > 0 && {
+                images: images.map((img) => ({ src: img.url })),
+              }),
             },
           )
           // Update variants that already have mappings.
