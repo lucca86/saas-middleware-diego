@@ -12,6 +12,8 @@ import {
   createTiendaNubeProduct,
   updateTiendaNubeProduct,
   updateTiendaNubeVariant,
+  addTiendaNubeProductImage,
+  listTiendaNubeProductImages,
 } from "./tiendanube"
 import { writeSyncLogImport } from "./sync-log"
 
@@ -157,10 +159,7 @@ export async function runTiendaNubeExport(
       published: product.status === "active",
       attributes,
       variants: tnVariants,
-      // TN accepts images as array of { src } objects, sorted by position.
-      ...(images.length > 0 && {
-        images: images.map((img) => ({ src: img.url })),
-      }),
+      // Images are uploaded separately after creation via POST /products/{id}/images
     }
 
     try {
@@ -178,11 +177,33 @@ export async function runTiendaNubeExport(
               name: tnPayload.name,
               description: tnPayload.description,
               published: tnPayload.published,
-              ...(images.length > 0 && {
-                images: images.map((img) => ({ src: img.url })),
-              }),
             },
           )
+
+          // Upload any images not yet in TN (compare by src URL).
+          if (images.length > 0) {
+            const existingImgs = await listTiendaNubeProductImages(
+              storeId,
+              Number(mapping.external_product_id),
+              accessToken,
+            )
+            const existingSrcs = new Set(existingImgs.map((i) => i.src))
+            for (let ii = 0; ii < images.length; ii++) {
+              if (!existingSrcs.has(images[ii].url)) {
+                try {
+                  await addTiendaNubeProductImage(
+                    storeId,
+                    Number(mapping.external_product_id),
+                    accessToken,
+                    images[ii].url,
+                    ii + 1,
+                  )
+                } catch {
+                  // Non-fatal — skip this image.
+                }
+              }
+            }
+          }
           // Update variants that already have mappings.
           for (const v of variants) {
             const extVariantId = mappedVariantIds.get(v.id)
@@ -208,6 +229,21 @@ export async function runTiendaNubeExport(
       } else {
         // ── Not mapped → CREATE in TN ─────────────────────────────────────
         const created = await createTiendaNubeProduct(storeId, accessToken, tnPayload)
+
+        // Upload images via POST /products/{id}/images (separate endpoint).
+        for (let ii = 0; ii < images.length; ii++) {
+          try {
+            await addTiendaNubeProductImage(
+              storeId,
+              created.id,
+              accessToken,
+              images[ii].url,
+              ii + 1,
+            )
+          } catch {
+            // Image upload failure is non-fatal — log and continue.
+          }
+        }
 
         // Store product-level mapping.
         await service.from("channel_product_mappings").insert({

@@ -381,6 +381,7 @@ export async function updateTiendaNubeVariant(
 /**
  * Create a new product in TiendaNube.
  * Returns the created product with its variants (needed to store mappings).
+ * NOTE: images are NOT accepted in this payload — use addTiendaNubeProductImage after creation.
  */
 export async function createTiendaNubeProduct(
   storeId: string | number,
@@ -388,6 +389,8 @@ export async function createTiendaNubeProduct(
   data: Record<string, unknown>,
 ): Promise<TiendaNubeProduct> {
   const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  // Strip images key — TN ignores it on creation and it can cause 422.
+  const { images: _ignored, ...payload } = data as Record<string, unknown> & { images?: unknown }
   const res = await fetch(`${API_BASE}/${storeId}/products`, {
     method: "POST",
     headers: {
@@ -396,13 +399,71 @@ export async function createTiendaNubeProduct(
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
     cache: "no-store",
   })
   if (!res.ok) {
     const body = await res.text()
     throw new TiendaNubeError(`POST /products: ${res.status}`, res.status, body)
   }
+  return res.json()
+}
+
+/**
+ * Upload a single image to a TN product via POST /products/{id}/images.
+ * This is the only supported way to add images — images are not accepted
+ * in the product creation or update payload.
+ */
+export async function addTiendaNubeProductImage(
+  storeId: string | number,
+  productId: number,
+  accessToken: string,
+  src: string,
+  position?: number,
+): Promise<{ id: number; src: string; position: number }> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const body: Record<string, unknown> = { src }
+  if (position !== undefined) body.position = position
+  const res = await fetch(`${API_BASE}/${storeId}/products/${productId}/images`, {
+    method: "POST",
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new TiendaNubeError(
+      `POST /products/${productId}/images: ${res.status}`,
+      res.status,
+      text,
+    )
+  }
+  return res.json()
+}
+
+/**
+ * List existing images for a TN product.
+ */
+export async function listTiendaNubeProductImages(
+  storeId: string | number,
+  productId: number,
+  accessToken: string,
+): Promise<Array<{ id: number; src: string; position: number }>> {
+  const userAgent = process.env.TIENDANUBE_APP_NAME ?? "Stockcurve (support@stockcurve.app)"
+  const res = await fetch(`${API_BASE}/${storeId}/products/${productId}/images`, {
+    headers: {
+      Authentication: `bearer ${accessToken}`,
+      "User-Agent": userAgent,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+  if (!res.ok) return []
   return res.json()
 }
 
