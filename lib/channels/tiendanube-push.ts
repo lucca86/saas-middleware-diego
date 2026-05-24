@@ -201,5 +201,7 @@ export async function pushStockToTiendaNube(
   variantId: string,
   newStock: number,
 ): Promise<void> {
-  return pushVariantToTiendaNube(tenantId, variantId, { stock: newStock })
+  // productId is resolved internally via the channel_product_mappings query.
+  // We pass an empty string for productId and let the mapping lookup handle it.
+  return pushVariantToTiendaNube(tenantId, "", variantId, { stock: newStock })
 }

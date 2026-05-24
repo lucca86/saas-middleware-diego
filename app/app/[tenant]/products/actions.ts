@@ -251,7 +251,7 @@ export async function saveProduct(
           status: (v.status === "archived" ? "disabled" : v.status) as "active" | "disabled",
         }
         void pushVariantToWoo(tenantId, v.id, varPayload)
-        void pushVariantToTiendaNube(tenantId, v.id, varPayload)
+        void pushVariantToTiendaNube(tenantId, productId, v.id, varPayload)
       }
     }
   }
