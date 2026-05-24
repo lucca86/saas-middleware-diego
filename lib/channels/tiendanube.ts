@@ -68,14 +68,23 @@ export function tiendaNubeIsConfigured(): boolean {
 }
 
 /**
- * Build the URL the user must be redirected to so they grant access. The
- * state is opaque from TN's side — we store it server-side mapped to the
- * (tenant, user) pair so we can resume the flow on the callback.
+ * Build the URL the user must be redirected to so they grant access.
+ *
+ * TN REQUIRES the redirect_uri to be included explicitly in the authorize URL,
+ * and it must match EXACTLY the one configured in the partner panel.
+ * Without it, TN shows the generic platform login instead of the app auth flow.
  */
 export function buildAuthorizeUrl(state: string): string {
   const appId = requireEnv("TIENDANUBE_APP_ID")
+  const baseAppUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+
   const url = new URL(`${AUTH_BASE}/apps/${appId}/authorize`)
   url.searchParams.set("state", state)
+  if (baseAppUrl) {
+    url.searchParams.set("redirect_uri", `${baseAppUrl}/api/tiendanube/callback`)
+  }
   return url.toString()
 }
 
