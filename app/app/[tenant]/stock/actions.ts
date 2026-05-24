@@ -5,6 +5,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { requireTenant } from "@/lib/tenant/context"
 import { pushStockToWoo } from "@/lib/channels/woocommerce-push"
+import { pushStockToTN } from "@/lib/channels/tiendanube-push"
 
 /**
  * Public input. The user always passes a positive quantity; for `out` we
@@ -116,8 +117,10 @@ export async function recordStockMovement(
   revalidatePath(`/app/${tenantSlug}/products`)
   revalidatePath(`/app/${tenantSlug}/products/${variant.product_id}`)
 
-  // Push new stock to any WC channel mapped to this variant. Fire-and-forget.
-  void pushStockToWoo(tenant.id, variant.id, (variant.stock ?? 0) + qty)
+  // Push new stock to any mapped channels. Fire-and-forget.
+  const newStock = (variant.stock ?? 0) + qty
+  void pushStockToWoo(tenant.id, variant.id, newStock)
+  void pushStockToTN(tenant.id, variant.id, newStock)
 
-  return { ok: true, newStock: (variant.stock ?? 0) + qty }
+  return { ok: true, newStock }
 }

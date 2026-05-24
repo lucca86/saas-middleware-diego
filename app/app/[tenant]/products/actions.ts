@@ -8,6 +8,7 @@ import { requireTenant } from "@/lib/tenant/context"
 import { slugify } from "@/lib/products/slug"
 import { variantKey } from "@/lib/products/cartesian"
 import { pushProductToWoo, pushVariantToWoo } from "@/lib/channels/woocommerce-push"
+import { pushProductToTN, pushVariantToTN } from "@/lib/channels/tiendanube-push"
 
 const variantInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -230,19 +231,24 @@ export async function saveProduct(
   // caught inside the pusher so they never block the SC save response.
   const { id: tenantId } = (await requireTenant(tenantSlug)).tenant
   if (productId) {
-    void pushProductToWoo(tenantId, productId, {
+    const pushPayload = {
       name: parsed.data.name,
       status: parsed.data.status as "active" | "draft" | "archived",
       description: parsed.data.description ?? undefined,
-    })
+    }
+    void pushProductToWoo(tenantId, productId, pushPayload)
+    void pushProductToTN(tenantId, productId, pushPayload)
+
     for (const v of parsed.data.variants) {
       if (v.id) {
-        void pushVariantToWoo(tenantId, v.id, {
+        const varPayload = {
           price: v.price,
           compareAtPrice: v.compare_at_price ?? null,
           sku: v.sku ?? null,
           status: (v.status === "archived" ? "disabled" : v.status) as "active" | "disabled",
-        })
+        }
+        void pushVariantToWoo(tenantId, v.id, varPayload)
+        void pushVariantToTN(tenantId, v.id, varPayload)
       }
     }
   }
