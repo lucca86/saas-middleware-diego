@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { ArrowLeft, ShoppingBag, Lock, AlertCircle } from "lucide-react"
+import { ArrowLeft, ShoppingBag, Lock } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { tiendaNubeIsConfigured } from "@/lib/channels/tiendanube"
-import { mlIsConfigured } from "@/lib/channels/mercadolibre"
 import { startTiendaNubeConnect, startMercadoLibreConnect } from "../actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -54,7 +53,6 @@ export default async function NewChannelPage({
   const { tenant: slug } = await params
   await requireTenant(slug)
   const tnReady = tiendaNubeIsConfigured()
-  const mlReady = mlIsConfigured()
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
@@ -145,35 +143,26 @@ export default async function NewChannelPage({
               ) : p.id === "woocommerce" ? (
                 <WooCommerceConnectForm tenantSlug={slug} />
               ) : p.id === "mercadolibre" ? (
-                mlReady ? (
-                  <>
-                    <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs">
-                      <p className="font-medium text-foreground">Necesitás tu cuenta de vendedor de MercadoLibre.</p>
-                      <p className="mt-1 text-muted-foreground">
-                        Vas a iniciar sesión con tu cuenta de ML. Si tenés múltiples cuentas,
-                        asegurate de entrar con la de vendedor.
-                      </p>
-                    </div>
-                    <form
-                      action={async () => {
-                        "use server"
-                        await startMercadoLibreConnect(slug)
-                      }}
-                    >
-                      <Button type="submit" className="w-full shadow-signal">
-                        <Lock className="mr-1.5 h-4 w-4" />
-                        Conectar con MercadoLibre
-                      </Button>
-                    </form>
-                  </>
-                ) : (
-                  <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
-                    <span>
-                      Faltan ML_APP_ID y ML_CLIENT_SECRET. Cargalos en Vars del proyecto.
-                    </span>
+                <>
+                  <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs">
+                    <p className="font-medium text-foreground">Necesitás tu cuenta de vendedor de MercadoLibre.</p>
+                    <p className="mt-1 text-muted-foreground">
+                      Vas a iniciar sesión con tu cuenta de ML. Si tenés múltiples cuentas,
+                      asegurate de entrar con la de vendedor.
+                    </p>
                   </div>
-                )
+                  <form
+                    action={async () => {
+                      "use server"
+                      await startMercadoLibreConnect(slug)
+                    }}
+                  >
+                    <Button type="submit" className="w-full shadow-signal">
+                      <Lock className="mr-1.5 h-4 w-4" />
+                      Conectar con MercadoLibre
+                    </Button>
+                  </form>
+                </>
               ) : (
                 <Button disabled variant="outline" className="w-full bg-transparent">
                   Próximamente
