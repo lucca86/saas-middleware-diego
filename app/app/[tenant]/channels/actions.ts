@@ -6,13 +6,8 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { requireTenant } from "@/lib/tenant/context"
-import {
-  buildAuthorizeUrl,
-  fetchStore,
-  tiendaNubeIsConfigured,
-  registerTiendaNubeWebhook,
-  listTiendaNubeWebhooks,
-} from "@/lib/channels/tiendanube"
+import { buildAuthorizeUrl, fetchStore, tiendaNubeIsConfigured, registerTiendaNubeWebhook, listTiendaNubeWebhooks } from "@/lib/channels/tiendanube"
+import { buildMLAuthorizeUrl, mlIsConfigured } from "@/lib/channels/mercadolibre"
 import {
   fetchStoreInfo,
   wooIsValidStoreUrl,
@@ -500,4 +495,33 @@ export async function registerTiendaNubeWebhooks(tenantSlug: string, channelId: 
   } catch (err) {
     return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
   }
+}
+
+/**
+ * Kick off the MercadoLibre OAuth flow.
+ * Stores a CSRF state row and redirects to ML's authorization URL.
+ */
+export async function startMercadoLibreConnect(tenantSlug: string) {
+  if (!mlIsConfigured()) {
+    throw new Error("MercadoLibre no está configurado: faltan ML_APP_ID o ML_CLIENT_SECRET.")
+  }
+  const { tenant, role } = await requireTenant(tenantSlug)
+  if (!["owner", "admin", "operator"].includes(role)) {
+    throw new Error("No tenés permisos para conectar canales en este tenant.")
+  }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error("No autenticado.")
+
+  const state = randomBytes(32).toString("base64url")
+  const service = createServiceClient()
+  const { error } = await service.from("channel_oauth_states").insert({
+    state,
+    tenant_id: tenant.id,
+    provider: "mercadolibre",
+    user_id: user.id,
+  })
+  if (error) throw new Error(`No se pudo iniciar el flujo OAuth: ${error.message}`)
+
+  redirect(buildMLAuthorizeUrl(state))
 }

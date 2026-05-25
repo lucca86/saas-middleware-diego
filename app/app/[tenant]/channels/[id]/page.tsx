@@ -6,6 +6,7 @@ import { getChannel } from "@/lib/channels/queries"
 import { ChannelDetailClient } from "@/components/channels/channel-detail-client"
 import { WooCommerceImportCard } from "@/components/channels/woocommerce-import-card"
 import { TiendaNubeImportCard } from "@/components/channels/tiendanube-import-card"
+import { MercadoLibreSyncCard } from "@/components/channels/mercadolibre-sync-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -159,7 +160,19 @@ export default async function ChannelDetailPage({
                 <p className="font-medium">Último error</p>
                 <p className="font-mono">{channel.last_error}</p>
               </div>
-            ) : null}
+      ) : channel.provider === "mercadolibre" ? (
+        <MercadoLibreSyncCard
+          tenantSlug={slug}
+          channelId={channel.id}
+          tenantId={tenant.id}
+          canManage={canManage}
+          defaultCategoryId={(meta.default_ml_category_id as string | null) ?? null}
+          lastImportAt={typeof meta.last_import === "string" ? meta.last_import : null}
+          lastImportSummary={(meta.last_import_summary as { total: number; imported: number; skipped: number; failed: number; errors: string[] } | null) ?? null}
+          lastExportAt={typeof meta.last_export === "string" ? meta.last_export : null}
+          lastExportSummary={(meta.last_export_summary as { total: number; created: number; updated: number; skipped: number; failed: number; errors: string[] } | null) ?? null}
+        />
+      ) : null}
           </CardContent>
         </Card>
       </div>
