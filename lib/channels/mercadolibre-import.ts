@@ -208,7 +208,7 @@ export async function* runMLImport(opts: {
     channelId,
     status: summary.failed > 0 ? (summary.imported > 0 ? "partial" : "error") : "ok",
     summary: `ML import: ${summary.imported} importados, ${summary.skipped} omitidos, ${summary.failed} fallaron de ${summary.total}.`,
-    payload: summary,
+    payload: summary as unknown as Record<string, unknown>,
   })
 
   yield { type: "done", summary }
