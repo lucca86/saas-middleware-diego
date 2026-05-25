@@ -180,16 +180,17 @@ export async function runTiendaNubeExport(
             },
           )
 
-          // Upload any images not yet in TN (compare by src URL).
+          // Upload images only if TN has none yet for this product.
+          // Avoids duplicates on re-export: TN returns its own CDN URLs
+          // which never match the original SC URLs.
           if (images.length > 0) {
             const existingImgs = await listTiendaNubeProductImages(
               storeId,
               Number(mapping.external_product_id),
               accessToken,
             )
-            const existingSrcs = new Set(existingImgs.map((i) => i.src))
-            for (let ii = 0; ii < images.length; ii++) {
-              if (!existingSrcs.has(images[ii].url)) {
+            if (existingImgs.length === 0) {
+              for (let ii = 0; ii < images.length; ii++) {
                 try {
                   await addTiendaNubeProductImage(
                     storeId,
