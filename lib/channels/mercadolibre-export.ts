@@ -173,7 +173,9 @@ export async function* runMLExport(opts: {
         summary.updated++
         yield { type: "progress", current: i + 1, total: products.length, productName, action: "updated" }
 
-        void writeSyncLogPush(channelId, {
+        void writeSyncLogPush({
+          tenantId,
+          channelId,
           eventType: "push_product",
           status: "ok",
           summary: `ML actualizado: ${productName}`,
@@ -229,7 +231,9 @@ export async function* runMLExport(opts: {
         summary.created++
         yield { type: "progress", current: i + 1, total: products.length, productName, action: "created" }
 
-        void writeSyncLogPush(channelId, {
+        void writeSyncLogPush({
+          tenantId,
+          channelId,
           eventType: "push_product",
           status: "ok",
           summary: `ML creado: ${productName} (${created.id})`,
@@ -242,7 +246,9 @@ export async function* runMLExport(opts: {
       summary.errors.push(`${productName}: ${message}`)
       yield { type: "progress", current: i + 1, total: products.length, productName, action: "failed" }
 
-      void writeSyncLogPush(channelId, {
+      void writeSyncLogPush({
+        tenantId,
+        channelId,
         eventType: "push_product",
         status: "error",
         summary: `Error ML ${productName}: ${message}`,
@@ -264,7 +270,9 @@ export async function* runMLExport(opts: {
     })
     .eq("id", channelId)
 
-  void writeSyncLogPush(channelId, {
+  void writeSyncLogPush({
+    tenantId,
+    channelId,
     eventType: "push_product",
     status: summary.failed > 0 ? (summary.created + summary.updated > 0 ? "partial" : "error") : "ok",
     summary: `ML export: ${summary.created} creados, ${summary.updated} actualizados, ${summary.skipped} omitidos, ${summary.failed} fallaron de ${summary.total}.`,

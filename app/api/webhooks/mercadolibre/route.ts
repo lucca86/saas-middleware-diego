@@ -2,7 +2,7 @@ import "server-only"
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { fetchMLItem, fetchMLOrder } from "@/lib/channels/mercadolibre"
-import { writeSyncLogWebhook } from "@/lib/channels/sync-log"
+import { writeSyncLogWebhook, writeSyncLogPush } from "@/lib/channels/sync-log"
 
 /**
  * MercadoLibre → Stockcurve notification receiver.
@@ -76,8 +76,10 @@ async function processMLNotification({
         await handleItemNotification({ channel, resource, service })
       }
     } catch (err) {
-      void writeSyncLogWebhook(channel.id, {
-        eventType: "error",
+      void writeSyncLogWebhook({
+        tenantId: channel.tenant_id,
+        channelId: channel.id,
+        eventType: "webhook_product",
         status: "error",
         summary: `Error procesando notificación ML (${topic}): ${err instanceof Error ? err.message : String(err)}`,
         payload: { topic, resource },
@@ -136,7 +138,9 @@ async function handleOrderNotification({
     .single()
 
   if (orderErr || !scOrder) {
-    void writeSyncLogWebhook(channel.id, {
+    void writeSyncLogWebhook({
+      tenantId: channel.tenant_id,
+      channelId: channel.id,
       eventType: "webhook_order",
       status: "error",
       summary: `Error guardando orden ML #${orderId}: ${orderErr?.message ?? "unknown"}`,
@@ -207,7 +211,9 @@ async function handleOrderNotification({
     }
   }
 
-  void writeSyncLogWebhook(channel.id, {
+  void writeSyncLogWebhook({
+    tenantId: channel.tenant_id,
+    channelId: channel.id,
     eventType: "webhook_order",
     status: "ok",
     summary: `Orden ML #${orderId} (${order.status}) procesada. Total: $${totalAmount}`,
@@ -239,7 +245,9 @@ async function handleItemNotification({
     .maybeSingle()
 
   if (!mapping?.product_id) {
-    void writeSyncLogWebhook(channel.id, {
+    void writeSyncLogWebhook({
+      tenantId: channel.tenant_id,
+      channelId: channel.id,
       eventType: "webhook_product",
       status: "skipped",
       summary: `Item ML ${itemId} no mapeado — ignorado`,
@@ -269,7 +277,9 @@ async function handleItemNotification({
       .eq("id", mapping.variant_id)
   }
 
-  void writeSyncLogWebhook(channel.id, {
+  void writeSyncLogWebhook({
+    tenantId: channel.tenant_id,
+    channelId: channel.id,
     eventType: "webhook_product",
     status: "ok",
     summary: `Item ML ${itemId} actualizado: status=${item.status}, stock=${item.available_quantity}`,

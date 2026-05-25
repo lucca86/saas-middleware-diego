@@ -203,7 +203,9 @@ export async function* runMLImport(opts: {
     })
     .eq("id", channelId)
 
-  void writeSyncLogImport(channelId, {
+  void writeSyncLogImport({
+    tenantId,
+    channelId,
     status: summary.failed > 0 ? (summary.imported > 0 ? "partial" : "error") : "ok",
     summary: `ML import: ${summary.imported} importados, ${summary.skipped} omitidos, ${summary.failed} fallaron de ${summary.total}.`,
     payload: summary,
