@@ -32,6 +32,8 @@ const STATUS_LABEL: Record<string, string> = {
   revoked: "Revocado",
 }
 
+export const dynamic = "force-dynamic"
+
 export default async function ChannelDetailPage({
   params,
   searchParams,
@@ -55,7 +57,7 @@ export default async function ChannelDetailPage({
   const mlStoreUrl = nickname
     ? `https://www.mercadolibre.com.ar/tienda/${encodeURIComponent(nickname)}`
     : null
-  const mlSellingUrl = "https://www.mercadolibre.com.ar/myml/selling"
+  const mlSellingUrl = "https://www.mercadolibre.com.ar/ventas"
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
