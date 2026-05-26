@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
-import { exchangeMLCode, fetchMLUserInfo, mlIsConfigured } from "@/lib/channels/mercadolibre"
+import { exchangeMLCode, fetchMLUserInfo } from "@/lib/channels/mercadolibre"
 
 export const runtime = "nodejs"
 
@@ -9,10 +9,10 @@ export const runtime = "nodejs"
  *
  * Sequence:
  *   1. Validate code + state params.
- *   2. Look up state row to recover (tenant_id, user_id).
- *   3. Exchange code for access_token + refresh_token.
+ *   2. Look up state row to recover (tenant_id, user_id, ml credentials).
+ *   3. Exchange code for access_token + refresh_token using tenant credentials.
  *   4. Fetch /users/me to get user_id, nickname, site_id.
- *   5. Upsert into sales_channels.
+ *   5. Upsert into sales_channels (storing ml_app_id + ml_client_secret in metadata).
  *   6. Burn the state row and redirect to the channel page.
  */
 export async function GET(req: NextRequest) {
@@ -21,9 +21,6 @@ export async function GET(req: NextRequest) {
   const state = url.searchParams.get("state")
   const errorParam = url.searchParams.get("error")
 
-  if (!mlIsConfigured()) {
-    return NextResponse.redirect(new URL("/?error=ml_not_configured", url.origin))
-  }
   if (errorParam) {
     return NextResponse.redirect(
       new URL(`/?error=${encodeURIComponent(errorParam)}`, url.origin),
@@ -37,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   const { data: stateRow, error: stateErr } = await service
     .from("channel_oauth_states")
-    .select("state, tenant_id, provider, user_id, expires_at")
+    .select("state, tenant_id, provider, user_id, expires_at, metadata")
     .eq("state", state)
     .maybeSingle()
 
@@ -47,6 +44,15 @@ export async function GET(req: NextRequest) {
   if (new Date(stateRow.expires_at).getTime() < Date.now()) {
     await service.from("channel_oauth_states").delete().eq("state", state)
     return NextResponse.redirect(new URL("/?error=state_expired", url.origin))
+  }
+
+  // Extract tenant-provided credentials stored in the state metadata
+  const stateMeta = (stateRow.metadata ?? {}) as Record<string, string>
+  const mlAppId = stateMeta.ml_app_id ?? process.env.ML_APP_ID ?? ""
+  const mlClientSecret = stateMeta.ml_client_secret ?? process.env.ML_CLIENT_SECRET ?? ""
+
+  if (!mlAppId || !mlClientSecret) {
+    return NextResponse.redirect(new URL("/?error=ml_credentials_missing", url.origin))
   }
 
   const { data: tenant } = await service
@@ -64,12 +70,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeMLCode(code)
+    const tokens = await exchangeMLCode(code, { appId: mlAppId, clientSecret: mlClientSecret })
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     const mlUserId = tokens.user_id
 
-    // Temporarily store tokens in a dummy channelId-keyed way to use getMLAccessToken.
-    // We insert first, then fetch user info using the real channel row.
     const { data: upserted, error: upsertErr } = await service
       .from("sales_channels")
       .upsert(
@@ -87,7 +91,12 @@ export async function GET(req: NextRequest) {
           connected_at: new Date().toISOString(),
           last_synced_at: new Date().toISOString(),
           created_by: stateRow.user_id,
-          metadata: { ml_user_id: mlUserId },
+          // Store tenant credentials so auto-refresh works without env vars
+          metadata: {
+            ml_user_id: mlUserId,
+            ml_app_id: mlAppId,
+            ml_client_secret: mlClientSecret,
+          },
         },
         { onConflict: "tenant_id,provider,external_id" },
       )
@@ -96,7 +105,6 @@ export async function GET(req: NextRequest) {
 
     if (upsertErr) return fail(`db_${upsertErr.code ?? "error"}`)
 
-    // Enrich with user info now that the channel row exists.
     try {
       const userInfo = await fetchMLUserInfo(upserted.id)
       await service
@@ -106,6 +114,8 @@ export async function GET(req: NextRequest) {
           country: userInfo.country_id ?? null,
           metadata: {
             ml_user_id: mlUserId,
+            ml_app_id: mlAppId,
+            ml_client_secret: mlClientSecret,
             nickname: userInfo.nickname,
             email: userInfo.email,
             site_id: userInfo.site_id ?? "MLA",
@@ -127,3 +137,4 @@ export async function GET(req: NextRequest) {
     return fail(message)
   }
 }
+

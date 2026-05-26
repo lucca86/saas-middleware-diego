@@ -104,10 +104,12 @@ function requireEnv(key: string): string {
 
 /**
  * Build the MercadoLibre OAuth authorize URL.
- * The redirect_uri must match EXACTLY what is configured in the ML developer portal.
+ * Accepts explicit credentials so tenants can configure their own ML app
+ * instead of relying on global env vars.
  */
-export function buildMLAuthorizeUrl(state: string): string {
-  const appId = requireEnv("ML_APP_ID")
+export function buildMLAuthorizeUrl(state: string, credentials?: { appId: string }): string {
+  const appId = credentials?.appId ?? process.env.ML_APP_ID ?? ""
+  if (!appId) throw new Error("ML App ID no configurado.")
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
@@ -122,10 +124,15 @@ export function buildMLAuthorizeUrl(state: string): string {
 
 /**
  * Exchange an authorization code for an access + refresh token pair.
+ * Credentials can be passed explicitly (tenant-stored) or fall back to env vars.
  */
-export async function exchangeMLCode(code: string): Promise<MLTokenResponse> {
-  const appId = requireEnv("ML_APP_ID")
-  const secret = requireEnv("ML_CLIENT_SECRET")
+export async function exchangeMLCode(
+  code: string,
+  credentials?: { appId: string; clientSecret: string },
+): Promise<MLTokenResponse> {
+  const appId = credentials?.appId ?? process.env.ML_APP_ID ?? ""
+  const secret = credentials?.clientSecret ?? process.env.ML_CLIENT_SECRET ?? ""
+  if (!appId || !secret) throw new Error("ML credentials not configured.")
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
@@ -151,12 +158,17 @@ export async function exchangeMLCode(code: string): Promise<MLTokenResponse> {
 
 /**
  * Refresh an expired (or nearly-expired) token.
+ * Credentials can be passed explicitly (tenant-stored) or fall back to env vars.
  * IMPORTANT: refresh tokens are single-use. The new pair must be persisted
  * immediately after this call or the refresh token is lost.
  */
-export async function refreshMLToken(refreshToken: string): Promise<MLTokenResponse> {
-  const appId = requireEnv("ML_APP_ID")
-  const secret = requireEnv("ML_CLIENT_SECRET")
+export async function refreshMLToken(
+  refreshToken: string,
+  credentials?: { appId: string; clientSecret: string },
+): Promise<MLTokenResponse> {
+  const appId = credentials?.appId ?? process.env.ML_APP_ID ?? ""
+  const secret = credentials?.clientSecret ?? process.env.ML_CLIENT_SECRET ?? ""
+  if (!appId || !secret) throw new Error("ML credentials not configured.")
 
   const res = await fetch(`${ML_API_BASE}/oauth/token`, {
     method: "POST",
@@ -179,21 +191,13 @@ export async function refreshMLToken(refreshToken: string): Promise<MLTokenRespo
 // ─── Auto-refresh client ────────────────────────────────────────────────────────
 
 /**
- * Get a valid access token for the given channel, refreshing if needed.
- * Persists the new token pair to the DB when a refresh occurs.
+ * Returns true — ML credentials are now configured per-tenant via the connect
+ * form and stored in DB, so there are no required env vars to check.
+ * Kept for API compatibility with callers that check before showing the UI.
  */
-export async function getMLAccessToken(channelId: string): Promise<string> {
-  const service = createServiceClient()
-  const { data, error } = await service
-    .from("sales_channels")
-    .select("access_token, refresh_token, token_expires_at")
-    .eq("id", channelId)
-    .maybeSingle()
-
-  if (error || !data) throw new Error("Canal ML no encontrado")
-  if (!data.access_token || !data.refresh_token) {
-    throw new Error("Credenciales ML faltantes — reconectá el canal")
-  }
+export function mlIsConfigured(): boolean {
+  return true
+}
 
   // Check if we need to refresh (< 30 min remaining or already expired)
   const expiresAt = data.token_expires_at ? new Date(data.token_expires_at).getTime() : 0

@@ -498,30 +498,50 @@ export async function registerTiendaNubeWebhooks(tenantSlug: string, channelId: 
 }
 
 /**
- * Kick off the MercadoLibre OAuth flow.
- * Stores a CSRF state row and redirects to ML's authorization URL.
+ * Validate ML credentials provided by the user, store them in the
+ * oauth_states table and return the ML authorization URL to redirect to.
+ * This replaces the env-var-based flow — credentials are per-tenant.
  */
-export async function startMercadoLibreConnect(tenantSlug: string) {
-  if (!mlIsConfigured()) {
-    throw new Error("MercadoLibre no está configurado: faltan ML_APP_ID o ML_CLIENT_SECRET.")
-  }
-  const { tenant, role } = await requireTenant(tenantSlug)
-  if (!["owner", "admin", "operator"].includes(role)) {
-    throw new Error("No tenés permisos para conectar canales en este tenant.")
-  }
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error("No autenticado.")
+export async function connectMercadoLibre(
+  tenantSlug: string,
+  creds: { appId: string; clientSecret: string },
+): Promise<{ ok: true; redirectUrl: string } | { ok: false; error: string }> {
+  try {
+    const { tenant, role } = await requireTenant(tenantSlug)
+    if (!["owner", "admin", "operator"].includes(role)) {
+      return { ok: false, error: "No tenés permisos para conectar canales en este tenant." }
+    }
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { ok: false, error: "No autenticado." }
 
-  const state = randomBytes(32).toString("base64url")
-  const service = createServiceClient()
-  const { error } = await service.from("channel_oauth_states").insert({
-    state,
-    tenant_id: tenant.id,
-    provider: "mercadolibre",
-    user_id: user.id,
-  })
-  if (error) throw new Error(`No se pudo iniciar el flujo OAuth: ${error.message}`)
+    // Basic format validation
+    if (!/^\d+$/.test(creds.appId.trim())) {
+      return { ok: false, error: "El App ID debe ser un número (ej: 1234567890)." }
+    }
+    if (creds.clientSecret.trim().length < 10) {
+      return { ok: false, error: "El Client Secret parece inválido." }
+    }
 
-  redirect(buildMLAuthorizeUrl(state))
+    const state = randomBytes(32).toString("base64url")
+    const service = createServiceClient()
+
+    // Store credentials alongside the state so the callback can use them
+    const { error } = await service.from("channel_oauth_states").insert({
+      state,
+      tenant_id: tenant.id,
+      provider: "mercadolibre",
+      user_id: user.id,
+      metadata: {
+        ml_app_id: creds.appId.trim(),
+        ml_client_secret: creds.clientSecret.trim(),
+      },
+    })
+    if (error) return { ok: false, error: `No se pudo iniciar el flujo OAuth: ${error.message}` }
+
+    const redirectUrl = buildMLAuthorizeUrl(state, { appId: creds.appId.trim() })
+    return { ok: true, redirectUrl }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
 }

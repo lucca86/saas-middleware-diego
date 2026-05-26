@@ -1,12 +1,13 @@
 import Link from "next/link"
-import { ArrowLeft, ShoppingBag, Lock } from "lucide-react"
+import { ArrowLeft, ShoppingBag, AlertCircle } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { tiendaNubeIsConfigured } from "@/lib/channels/tiendanube"
-import { startTiendaNubeConnect, startMercadoLibreConnect } from "../actions"
+import { startTiendaNubeConnect } from "../actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { WooCommerceConnectForm } from "@/components/channels/woocommerce-connect-form"
+import { MercadoLibreConnectForm } from "@/components/channels/mercadolibre-connect-form"
 
 interface ProviderOption {
   id: "tiendanube" | "woocommerce" | "mercadolibre" | "shopify"
@@ -143,26 +144,7 @@ export default async function NewChannelPage({
               ) : p.id === "woocommerce" ? (
                 <WooCommerceConnectForm tenantSlug={slug} />
               ) : p.id === "mercadolibre" ? (
-                <>
-                  <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs">
-                    <p className="font-medium text-foreground">Necesitás tu cuenta de vendedor de MercadoLibre.</p>
-                    <p className="mt-1 text-muted-foreground">
-                      Vas a iniciar sesión con tu cuenta de ML. Si tenés múltiples cuentas,
-                      asegurate de entrar con la de vendedor.
-                    </p>
-                  </div>
-                  <form
-                    action={async () => {
-                      "use server"
-                      await startMercadoLibreConnect(slug)
-                    }}
-                  >
-                    <Button type="submit" className="w-full shadow-signal">
-                      <Lock className="mr-1.5 h-4 w-4" />
-                      Conectar con MercadoLibre
-                    </Button>
-                  </form>
-                </>
+                <MercadoLibreConnectForm tenantSlug={slug} />
               ) : (
                 <Button disabled variant="outline" className="w-full bg-transparent">
                   Próximamente
