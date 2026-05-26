@@ -47,7 +47,12 @@ export default async function ChannelDetailPage({
 
   const canManage = ["owner", "admin"].includes(role)
   const meta = channel.metadata as Record<string, unknown>
-  const planName = typeof meta.plan_name === "string" ? meta.plan_name : null
+  const nickname = typeof meta.nickname === "string" ? meta.nickname : null
+  const siteId = typeof meta.site_id === "string" ? meta.site_id.toUpperCase() : "MLA"
+  const mlStoreUrl = nickname
+    ? `https://www.mercadolibre.com.ar/tienda/${encodeURIComponent(nickname)}`
+    : null
+  const mlSellingUrl = "https://www.mercadolibre.com.ar/myml/selling"
   const lang = typeof meta.main_language === "string" ? meta.main_language : null
   const businessName = typeof meta.business_name === "string" ? meta.business_name : null
 
@@ -91,6 +96,22 @@ export default async function ChannelDetailPage({
             Log de sync
           </Link>
         </Button>
+        {channel.provider === "mercadolibre" && mlStoreUrl && (
+          <Button variant="outline" size="sm" asChild className="bg-transparent">
+            <a href={mlStoreUrl} target="_blank" rel="noreferrer">
+              <ExternalLink className="mr-1.5 h-4 w-4" />
+              Ver tienda
+            </a>
+          </Button>
+        )}
+        {channel.provider === "mercadolibre" && (
+          <Button variant="outline" size="sm" asChild className="bg-transparent">
+            <a href={mlSellingUrl} target="_blank" rel="noreferrer">
+              <ExternalLink className="mr-1.5 h-4 w-4" />
+              Mis publicaciones
+            </a>
+          </Button>
+        )}
       </header>
 
       {connected ? (
