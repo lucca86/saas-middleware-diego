@@ -215,7 +215,7 @@ export async function* runMLExport(opts: {
       } else {
         // ── CREATE new ML item ───────────────────────────────────────────────
 
-        // Upload images to ML's CDN first
+        // ── Upload images ────────────────────────────────────────────────────
         const mlPictureIds: string[] = []
         for (const img of images.slice(0, 6)) {
           try {
@@ -226,12 +226,15 @@ export async function* runMLExport(opts: {
           }
         }
 
-        // Listing types that require at least 1 picture
-        const picRequiredTypes = ["gold_special", "gold_pro", "gold_premium"]
-        const effectiveListingType =
-          mlPictureIds.length === 0 && picRequiredTypes.includes(defaultListingType)
-            ? "gold_premium" // gold_premium allows publishing without pictures
-            : defaultListingType
+        // All paid listing types (gold_special, gold_premium, gold_pro, silver)
+        // require at least 1 picture. Skip the product with a clear error message
+        // so the user knows they need to add images first.
+        const freeListingTypes = ["free", "bronze"]
+        if (mlPictureIds.length === 0 && !freeListingTypes.includes(defaultListingType)) {
+          summary.failed++
+          summary.errors.push(`${productName}: sin imágenes. ML requiere al menos 1 foto para el tipo de publicación "${defaultListingType}". Agregá imágenes al producto e intentá de nuevo.`)
+          continue
+        }
 
         // Fetch + cache required category attributes
         if (!categoryAttrsCache.has(defaultCategoryId)) {
@@ -247,7 +250,7 @@ export async function* runMLExport(opts: {
           currency_id: currency,
           available_quantity: Math.max(0, mainVariant.stock ?? 0),
           buying_mode: "buy_it_now",
-          listing_type_id: effectiveListingType,
+          listing_type_id: defaultListingType,
           condition: "new",
           seller_custom_field: mainVariant.sku ?? product.sku ?? null,
           ...(product.description && { description: product.description as string }),
