@@ -1,3 +1,4 @@
+// v2
 import { NextResponse, type NextRequest } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { getMLAccessToken } from "@/lib/channels/mercadolibre"
