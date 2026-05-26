@@ -37,6 +37,7 @@ export function MercadoLibreConnectForm({ tenantSlug }: { tenantSlug: string }) 
       const res = await connectMercadoLibre(tenantSlug, {
         appId: appId.trim(),
         clientSecret: clientSecret.trim(),
+        appUrl: window.location.origin,
       })
       if (!res.ok) {
         toast.error(res.error)

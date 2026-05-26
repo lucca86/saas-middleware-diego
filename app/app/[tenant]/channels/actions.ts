@@ -504,7 +504,7 @@ export async function registerTiendaNubeWebhooks(tenantSlug: string, channelId: 
  */
 export async function connectMercadoLibre(
   tenantSlug: string,
-  creds: { appId: string; clientSecret: string },
+  creds: { appId: string; clientSecret: string; appUrl: string },
 ): Promise<{ ok: true; redirectUrl: string } | { ok: false; error: string }> {
   try {
     const { tenant, role } = await requireTenant(tenantSlug)
@@ -515,7 +515,6 @@ export async function connectMercadoLibre(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { ok: false, error: "No autenticado." }
 
-    // Basic format validation
     if (!/^\d+$/.test(creds.appId.trim())) {
       return { ok: false, error: "El App ID debe ser un número (ej: 1234567890)." }
     }
@@ -526,7 +525,6 @@ export async function connectMercadoLibre(
     const state = randomBytes(32).toString("base64url")
     const service = createServiceClient()
 
-    // Store credentials alongside the state so the callback can use them
     const { error } = await service.from("channel_oauth_states").insert({
       state,
       tenant_id: tenant.id,
@@ -535,11 +533,16 @@ export async function connectMercadoLibre(
       metadata: {
         ml_app_id: creds.appId.trim(),
         ml_client_secret: creds.clientSecret.trim(),
+        app_url: creds.appUrl,
       },
     })
     if (error) return { ok: false, error: `No se pudo iniciar el flujo OAuth: ${error.message}` }
 
-    const redirectUrl = buildMLAuthorizeUrl(state, { appId: creds.appId.trim() })
+    const redirectUrl = buildMLAuthorizeUrl(
+      state,
+      { appId: creds.appId.trim() },
+      creds.appUrl,
+    )
     return { ok: true, redirectUrl }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

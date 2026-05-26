@@ -50,6 +50,8 @@ export async function GET(req: NextRequest) {
   const stateMeta = (stateRow.metadata ?? {}) as Record<string, string>
   const mlAppId = stateMeta.ml_app_id ?? process.env.ML_APP_ID ?? ""
   const mlClientSecret = stateMeta.ml_client_secret ?? process.env.ML_CLIENT_SECRET ?? ""
+  // Use the app_url stored at connect time so redirect_uri matches exactly
+  const appUrl = stateMeta.app_url ?? url.origin
 
   if (!mlAppId || !mlClientSecret) {
     return NextResponse.redirect(new URL("/?error=ml_credentials_missing", url.origin))
@@ -70,7 +72,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeMLCode(code, { appId: mlAppId, clientSecret: mlClientSecret })
+    const tokens = await exchangeMLCode(
+      code,
+      { appId: mlAppId, clientSecret: mlClientSecret },
+      appUrl,
+    )
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     const mlUserId = tokens.user_id
 

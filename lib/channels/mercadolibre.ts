@@ -107,10 +107,15 @@ function requireEnv(key: string): string {
  * Accepts explicit credentials so tenants can configure their own ML app
  * instead of relying on global env vars.
  */
-export function buildMLAuthorizeUrl(state: string, credentials?: { appId: string }): string {
+export function buildMLAuthorizeUrl(
+  state: string,
+  credentials?: { appId: string },
+  appUrl?: string,
+): string {
   const appId = credentials?.appId ?? process.env.ML_APP_ID ?? ""
   if (!appId) throw new Error("ML App ID no configurado.")
   const baseUrl =
+    appUrl ??
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
 
@@ -129,11 +134,13 @@ export function buildMLAuthorizeUrl(state: string, credentials?: { appId: string
 export async function exchangeMLCode(
   code: string,
   credentials?: { appId: string; clientSecret: string },
+  appUrl?: string,
 ): Promise<MLTokenResponse> {
   const appId = credentials?.appId ?? process.env.ML_APP_ID ?? ""
   const secret = credentials?.clientSecret ?? process.env.ML_CLIENT_SECRET ?? ""
   if (!appId || !secret) throw new Error("ML credentials not configured.")
   const baseUrl =
+    appUrl ??
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
 
