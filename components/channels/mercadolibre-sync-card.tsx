@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { MLCategorySelector } from "./ml-category-selector"
 
 interface SyncSummary {
   total: number
@@ -27,6 +28,8 @@ interface MLSyncCardProps {
   lastExportAt: string | null
   lastExportSummary: SyncSummary | null
   defaultCategoryId: string | null
+  defaultCategoryName?: string | null
+  siteId?: string
 }
 
 interface ProgressState {
@@ -99,7 +102,7 @@ function useSSESync(endpoint: string) {
 }
 
 export function MercadoLibreSyncCard({
-  tenantSlug: _tenantSlug,
+  tenantSlug,
   channelId,
   tenantId,
   canManage,
@@ -108,9 +111,15 @@ export function MercadoLibreSyncCard({
   lastExportAt,
   lastExportSummary,
   defaultCategoryId,
+  defaultCategoryName = null,
+  siteId = "MLA",
 }: MLSyncCardProps) {
   const exportSync = useSSESync("/api/channels/mercadolibre/export")
   const importSync = useSSESync("/api/channels/mercadolibre/import")
+
+  // Local state so saving category updates button without page reload
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(defaultCategoryId)
+  const [activeCategoryName, setActiveCategoryName] = useState<string | null>(defaultCategoryName)
 
   function startExport() {
     exportSync.start(
@@ -144,11 +153,24 @@ export function MercadoLibreSyncCard({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!defaultCategoryId && (
+          <MLCategorySelector
+            tenantSlug={tenantSlug}
+            channelId={channelId}
+            siteId={siteId}
+            currentCategoryId={activeCategoryId}
+            currentCategoryName={activeCategoryName}
+            canManage={canManage}
+            onSaved={(id, name) => {
+              setActiveCategoryId(id)
+              setActiveCategoryName(name)
+            }}
+          />
+
+          {!activeCategoryId && (
             <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
-                Necesitás configurar una <strong>categoría ML por defecto</strong> en la configuración del canal antes de publicar.
+                Necesitás configurar una <strong>categoría ML por defecto</strong> antes de publicar.
               </span>
             </div>
           )}
@@ -199,7 +221,7 @@ export function MercadoLibreSyncCard({
           {!exportSync.state.running && !exportSync.state.done && (
             <Button
               onClick={startExport}
-              disabled={!canManage || !defaultCategoryId}
+              disabled={!canManage || !activeCategoryId}
               className="w-full"
               size="sm"
             >

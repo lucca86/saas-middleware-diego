@@ -548,3 +548,56 @@ export async function connectMercadoLibre(
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
+
+/**
+ * Save ML channel configuration (default category, listing type, etc.)
+ * Merges into the existing metadata jsonb to avoid overwriting other fields.
+ */
+export async function saveMLChannelConfig(
+  tenantSlug: string,
+  channelId: string,
+  config: {
+    default_ml_category_id: string
+    default_ml_category_name: string
+    default_listing_type?: string
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { tenant, role } = await requireTenant(tenantSlug)
+    if (!["owner", "admin"].includes(role)) {
+      return { ok: false, error: "Solo owners y admins pueden modificar la configuración del canal." }
+    }
+    const service = createServiceClient()
+
+    // Fetch current metadata to merge
+    const { data: channel, error: fetchErr } = await service
+      .from("sales_channels")
+      .select("metadata")
+      .eq("id", channelId)
+      .eq("tenant_id", tenant.id)
+      .maybeSingle()
+
+    if (fetchErr || !channel) return { ok: false, error: "Canal no encontrado." }
+
+    const existing = (channel.metadata ?? {}) as Record<string, unknown>
+    const updated = {
+      ...existing,
+      default_ml_category_id: config.default_ml_category_id,
+      default_ml_category_name: config.default_ml_category_name,
+      ...(config.default_listing_type ? { default_listing_type: config.default_listing_type } : {}),
+    }
+
+    const { error } = await service
+      .from("sales_channels")
+      .update({ metadata: updated })
+      .eq("id", channelId)
+      .eq("tenant_id", tenant.id)
+
+    if (error) return { ok: false, error: error.message }
+
+    revalidatePath(`/app/${tenantSlug}/channels/${channelId}`)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}

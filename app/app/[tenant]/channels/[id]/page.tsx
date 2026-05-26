@@ -166,7 +166,9 @@ export default async function ChannelDetailPage({
           channelId={channel.id}
           tenantId={tenant.id}
           canManage={canManage}
+          siteId={typeof meta.site_id === "string" ? meta.site_id : "MLA"}
           defaultCategoryId={(meta.default_ml_category_id as string | null) ?? null}
+          defaultCategoryName={(meta.default_ml_category_name as string | null) ?? null}
           lastImportAt={typeof meta.last_import === "string" ? meta.last_import : null}
           lastImportSummary={(meta.last_import_summary as { total: number; imported: number; skipped: number; failed: number; errors: string[] } | null) ?? null}
           lastExportAt={typeof meta.last_export === "string" ? meta.last_export : null}
