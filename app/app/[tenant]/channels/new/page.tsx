@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowLeft, ShoppingBag, AlertCircle } from "lucide-react"
+import { ArrowLeft, ShoppingBag, AlertCircle, Lock } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { tiendaNubeIsConfigured } from "@/lib/channels/tiendanube"
 import { startTiendaNubeConnect } from "../actions"
