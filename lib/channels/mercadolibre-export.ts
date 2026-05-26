@@ -219,12 +219,15 @@ export async function* runMLExport(opts: {
         const mlPictureIds: string[] = []
         for (const img of images.slice(0, 6)) {
           try {
+            console.log("[v0] ML upload image URL:", img.url)
             const uploaded = await uploadMLPicture(channelId, img.url)
+            console.log("[v0] ML upload result:", uploaded)
             if (uploaded?.id) mlPictureIds.push(uploaded.id)
-          } catch {
-            // Non-fatal — continue without this image
+          } catch (e) {
+            console.log("[v0] ML upload error:", e instanceof Error ? e.message : String(e))
           }
         }
+        console.log("[v0] mlPictureIds after upload:", mlPictureIds)
 
         // All paid listing types (gold_special, gold_premium, gold_pro, silver)
         // require at least 1 picture. Skip the product with a clear error message
