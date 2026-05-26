@@ -1,5 +1,5 @@
 /**
- * MercadoLibre API client with automatic token refresh.
+ * MercadoLibre API client v2 with automatic token refresh.
  *
  * Key differences from TiendaNube/WooCommerce:
  * - Access tokens expire in 6 hours → must auto-refresh.
