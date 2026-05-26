@@ -47,14 +47,15 @@ export default async function ChannelDetailPage({
 
   const canManage = ["owner", "admin"].includes(role)
   const meta = channel.metadata as Record<string, unknown>
+
+  const planName = typeof meta.plan_name === "string" ? meta.plan_name : null
+  const lang = typeof meta.main_language === "string" ? meta.main_language : null
+  const businessName = typeof meta.business_name === "string" ? meta.business_name : null
   const nickname = typeof meta.nickname === "string" ? meta.nickname : null
-  const siteId = typeof meta.site_id === "string" ? meta.site_id.toUpperCase() : "MLA"
   const mlStoreUrl = nickname
     ? `https://www.mercadolibre.com.ar/tienda/${encodeURIComponent(nickname)}`
     : null
   const mlSellingUrl = "https://www.mercadolibre.com.ar/myml/selling"
-  const lang = typeof meta.main_language === "string" ? meta.main_language : null
-  const businessName = typeof meta.business_name === "string" ? meta.business_name : null
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
@@ -90,28 +91,30 @@ export default async function ChannelDetailPage({
           {channel.status === "connected" ? <CheckCircle2 className="mr-1 h-3 w-3" /> : null}
           {STATUS_LABEL[channel.status] ?? channel.status}
         </Badge>
-        <Button variant="outline" size="sm" asChild className="bg-transparent">
-          <Link href={`/app/${slug}/channels/${id}/sync-log`}>
-            <History className="mr-1.5 h-4 w-4" />
-            Log de sync
-          </Link>
-        </Button>
-        {channel.provider === "mercadolibre" && mlStoreUrl && (
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild className="bg-transparent">
-            <a href={mlStoreUrl} target="_blank" rel="noreferrer">
-              <ExternalLink className="mr-1.5 h-4 w-4" />
-              Ver tienda
-            </a>
+            <Link href={`/app/${slug}/channels/${id}/sync-log`}>
+              <History className="mr-1.5 h-4 w-4" />
+              Log de sync
+            </Link>
           </Button>
-        )}
-        {channel.provider === "mercadolibre" && (
-          <Button variant="outline" size="sm" asChild className="bg-transparent">
-            <a href={mlSellingUrl} target="_blank" rel="noreferrer">
-              <ExternalLink className="mr-1.5 h-4 w-4" />
-              Mis publicaciones
-            </a>
-          </Button>
-        )}
+          {channel.provider === "mercadolibre" && mlStoreUrl && (
+            <Button variant="outline" size="sm" asChild className="bg-transparent">
+              <a href={mlStoreUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="mr-1.5 h-4 w-4" />
+                Ver tienda
+              </a>
+            </Button>
+          )}
+          {channel.provider === "mercadolibre" && (
+            <Button variant="outline" size="sm" asChild className="bg-transparent">
+              <a href={mlSellingUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="mr-1.5 h-4 w-4" />
+                Mis publicaciones
+              </a>
+            </Button>
+          )}
+        </div>
       </header>
 
       {connected ? (
@@ -173,7 +176,7 @@ export default async function ChannelDetailPage({
               </ul>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Tienda Nube no devolvió scopes específicos para este token.
+                No se reportaron scopes específicos para este token.
               </p>
             )}
             {channel.last_error ? (
@@ -181,7 +184,12 @@ export default async function ChannelDetailPage({
                 <p className="font-medium">Último error</p>
                 <p className="font-mono">{channel.last_error}</p>
               </div>
-      ) : channel.provider === "mercadolibre" ? (
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      {channel.provider === "mercadolibre" ? (
         <MercadoLibreSyncCard
           tenantSlug={slug}
           channelId={channel.id}
@@ -191,16 +199,28 @@ export default async function ChannelDetailPage({
           defaultCategoryId={(meta.default_ml_category_id as string | null) ?? null}
           defaultCategoryName={(meta.default_ml_category_name as string | null) ?? null}
           lastImportAt={typeof meta.last_import === "string" ? meta.last_import : null}
-          lastImportSummary={(meta.last_import_summary as { total: number; imported: number; skipped: number; failed: number; errors: string[] } | null) ?? null}
+          lastImportSummary={
+            (meta.last_import_summary as {
+              total: number
+              imported: number
+              skipped: number
+              failed: number
+              errors: string[]
+            } | null) ?? null
+          }
           lastExportAt={typeof meta.last_export === "string" ? meta.last_export : null}
-          lastExportSummary={(meta.last_export_summary as { total: number; created: number; updated: number; skipped: number; failed: number; errors: string[] } | null) ?? null}
+          lastExportSummary={
+            (meta.last_export_summary as {
+              total: number
+              created: number
+              updated: number
+              skipped: number
+              failed: number
+              errors: string[]
+            } | null) ?? null
+          }
         />
-      ) : null}
-          </CardContent>
-        </Card>
-      </div>
-
-      {channel.provider === "woocommerce" ? (
+      ) : channel.provider === "woocommerce" ? (
         <WooCommerceImportCard
           tenantSlug={slug}
           channelId={channel.id}
