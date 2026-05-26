@@ -18,6 +18,7 @@ import {
   updateMLItem,
   uploadMLPicture,
   getMLAccessToken,
+  fetchMLCategoryAttributes,
 } from "./mercadolibre"
 import { writeSyncLogPush } from "./sync-log"
 
@@ -40,6 +41,33 @@ export interface MLExportSummary {
   skipped: number
   failed: number
   errors: string[]
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch required attributes for a category and build the minimal attributes
+ * array ML needs. For each required attribute:
+ *   - If it has allowed values, use the first one.
+ *   - For free-text attributes, send value_name: "Otro".
+ * This avoids a 400 on first publish; users can refine later.
+ */
+async function buildRequiredAttributes(
+  categoryId: string,
+): Promise<Array<{ id: string; value_id?: string; value_name?: string }>> {
+  try {
+    const attrs = await fetchMLCategoryAttributes(categoryId)
+    return attrs
+      .filter((a) => a.tags?.required === true || a.tags?.["required"] === true)
+      .map((a) => {
+        if (a.values && a.values.length > 0) {
+          return { id: a.id, value_id: a.values[0].id, value_name: a.values[0].name }
+        }
+        return { id: a.id, value_name: "Otro" }
+      })
+  } catch {
+    return []
+  }
 }
 
 // ─── Main export runner ────────────────────────────────────────────────────────
@@ -103,6 +131,9 @@ export async function* runMLExport(opts: {
     failed: 0,
     errors: [],
   }
+
+  // Cache required attributes per category to avoid repeated API calls
+  const categoryAttrsCache = new Map<string, Array<{ id: string; value_id?: string; value_name?: string }>>()
 
   // Load existing mappings for this channel
   const { data: mappings } = await service
@@ -187,7 +218,6 @@ export async function* runMLExport(opts: {
         // Upload images to ML's CDN first
         const mlPictureIds: string[] = []
         for (const img of images.slice(0, 6)) {
-          // ML allows max 6 images
           try {
             const uploaded = await uploadMLPicture(channelId, img.url)
             if (uploaded?.id) mlPictureIds.push(uploaded.id)
@@ -196,6 +226,20 @@ export async function* runMLExport(opts: {
           }
         }
 
+        // Listing types that require at least 1 picture
+        const picRequiredTypes = ["gold_special", "gold_pro", "gold_premium"]
+        const effectiveListingType =
+          mlPictureIds.length === 0 && picRequiredTypes.includes(defaultListingType)
+            ? "gold_premium" // gold_premium allows publishing without pictures
+            : defaultListingType
+
+        // Fetch + cache required category attributes
+        if (!categoryAttrsCache.has(defaultCategoryId)) {
+          const attrs = await buildRequiredAttributes(defaultCategoryId)
+          categoryAttrsCache.set(defaultCategoryId, attrs)
+        }
+        const requiredAttributes = categoryAttrsCache.get(defaultCategoryId) ?? []
+
         const payload: Record<string, unknown> = {
           title: productName,
           category_id: defaultCategoryId,
@@ -203,13 +247,14 @@ export async function* runMLExport(opts: {
           currency_id: currency,
           available_quantity: Math.max(0, mainVariant.stock ?? 0),
           buying_mode: "buy_it_now",
-          listing_type_id: defaultListingType,
+          listing_type_id: effectiveListingType,
           condition: "new",
           seller_custom_field: mainVariant.sku ?? product.sku ?? null,
           ...(product.description && { description: product.description as string }),
           ...(mlPictureIds.length > 0 && {
             pictures: mlPictureIds.map((id) => ({ id })),
           }),
+          ...(requiredAttributes.length > 0 && { attributes: requiredAttributes }),
         }
 
         const created = await createMLItem(channelId, payload)
