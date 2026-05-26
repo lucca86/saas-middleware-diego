@@ -91,7 +91,7 @@ export interface MLOrder {
 // ─── Env helpers ───────────────────────────────────────────────────────────────
 
 export function mlIsConfigured(): boolean {
-  return !!(process.env.ML_APP_ID && process.env.ML_CLIENT_SECRET)
+  return true
 }
 
 function requireEnv(key: string): string {
@@ -189,15 +189,6 @@ export async function refreshMLToken(
 }
 
 // ─── Auto-refresh client ────────────────────────────────────────────────────────
-
-/**
- * Returns true — ML credentials are now configured per-tenant via the connect
- * form and stored in DB, so there are no required env vars to check.
- * Kept for API compatibility with callers that check before showing the UI.
- */
-export function mlIsConfigured(): boolean {
-  return true
-}
 
 /**
  * Get a valid access token for the given channel, refreshing it if needed.
