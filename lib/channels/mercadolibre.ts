@@ -202,7 +202,7 @@ export async function refreshMLToken(
  * Uses credentials stored in the channel metadata (ml_app_id / ml_client_secret)
  * so no global env vars are required at runtime.
  */
-async function getMLAccessToken(channelId: string): Promise<string> {
+export async function getMLAccessToken(channelId: string): Promise<string> {
   const service = createServiceClient()
   const { data, error } = await service
     .from("sales_channels")
