@@ -199,14 +199,37 @@ export function mlIsConfigured(): boolean {
   return true
 }
 
+/**
+ * Get a valid access token for the given channel, refreshing it if needed.
+ * Uses credentials stored in the channel metadata (ml_app_id / ml_client_secret)
+ * so no global env vars are required at runtime.
+ */
+async function getMLAccessToken(channelId: string): Promise<string> {
+  const service = createServiceClient()
+  const { data, error } = await service
+    .from("sales_channels")
+    .select("access_token, refresh_token, token_expires_at, metadata")
+    .eq("id", channelId)
+    .single()
+
+  if (error || !data) throw new Error(`Canal ML no encontrado: ${channelId}`)
+  if (!data.access_token) throw new Error(`Canal ML sin access_token: ${channelId}`)
+
   // Check if we need to refresh (< 30 min remaining or already expired)
   const expiresAt = data.token_expires_at ? new Date(data.token_expires_at).getTime() : 0
   const needsRefresh = Date.now() > expiresAt - REFRESH_THRESHOLD_MS
 
   if (!needsRefresh) return data.access_token as string
 
+  // Read tenant credentials from metadata if available, fall back to env vars
+  const meta = (data.metadata ?? {}) as Record<string, string>
+  const credentials =
+    meta.ml_app_id && meta.ml_client_secret
+      ? { appId: meta.ml_app_id, clientSecret: meta.ml_client_secret }
+      : undefined
+
   // Refresh the token
-  const newTokens = await refreshMLToken(data.refresh_token as string)
+  const newTokens = await refreshMLToken(data.refresh_token as string, credentials)
   const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString()
 
   await service
