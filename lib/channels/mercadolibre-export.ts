@@ -216,26 +216,33 @@ export async function* runMLExport(opts: {
         // ── CREATE new ML item ───────────────────────────────────────────────
 
         // ── Upload images ────────────────────────────────────────────────────
+        // Strategy:
+        // 1. Try to pre-upload via /pictures/items/upload → get an ML picture id.
+        // 2. If that fails (e.g. unsupported format like .webp), pass the URL
+        //    directly as { source } — ML will fetch and convert it on item creation.
         const mlPictureIds: string[] = []
+        const directSourceUrls: string[] = []
+
         for (const img of images.slice(0, 6)) {
           try {
-            console.log("[v0] ML upload image URL:", img.url)
             const uploaded = await uploadMLPicture(channelId, img.url)
-            console.log("[v0] ML upload result:", uploaded)
             if (uploaded?.id) mlPictureIds.push(uploaded.id)
-          } catch (e) {
-            console.log("[v0] ML upload error:", e instanceof Error ? e.message : String(e))
+          } catch {
+            directSourceUrls.push(img.url)
           }
         }
-        console.log("[v0] mlPictureIds after upload:", mlPictureIds)
 
-        // All paid listing types (gold_special, gold_premium, gold_pro, silver)
-        // require at least 1 picture. Skip the product with a clear error message
-        // so the user knows they need to add images first.
+        const picturesPayload = [
+          ...mlPictureIds.map((id) => ({ id })),
+          ...directSourceUrls.map((src) => ({ source: src })),
+        ]
+
         const freeListingTypes = ["free", "bronze"]
-        if (mlPictureIds.length === 0 && !freeListingTypes.includes(defaultListingType)) {
+        if (picturesPayload.length === 0 && !freeListingTypes.includes(defaultListingType)) {
           summary.failed++
-          summary.errors.push(`${productName}: sin imágenes. ML requiere al menos 1 foto para el tipo de publicación "${defaultListingType}". Agregá imágenes al producto e intentá de nuevo.`)
+          summary.errors.push(
+            `${productName}: sin imágenes. ML requiere al menos 1 foto para el tipo de publicación "${defaultListingType}". Agregá imágenes al producto e intentá de nuevo.`,
+          )
           continue
         }
 
@@ -257,9 +264,7 @@ export async function* runMLExport(opts: {
           condition: "new",
           seller_custom_field: mainVariant.sku ?? product.sku ?? null,
           ...(product.description && { description: product.description as string }),
-          ...(mlPictureIds.length > 0 && {
-            pictures: mlPictureIds.map((id) => ({ id })),
-          }),
+          ...(picturesPayload.length > 0 && { pictures: picturesPayload }),
           ...(requiredAttributes.length > 0 && { attributes: requiredAttributes }),
         }
 
