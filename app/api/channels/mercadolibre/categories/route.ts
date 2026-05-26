@@ -1,27 +1,21 @@
-// v3
+// ML category search — uses public ML endpoint, no auth required — v4
 import { NextResponse, type NextRequest } from "next/server"
 import { searchMLCategories } from "@/lib/channels/mercadolibre"
 
 export const runtime = "nodejs"
 
-/**
- * GET /api/channels/mercadolibre/categories?q=...&siteId=MLA
- *
- * Searches ML categories using the public domain_discovery endpoint.
- * No auth required — the endpoint is public.
- */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
-  const q = url.searchParams.get("q") ?? ""
-  const siteId = url.searchParams.get("siteId") ?? "MLA"
+  const q = (url.searchParams.get("q") ?? "").trim()
+  const siteId = (url.searchParams.get("siteId") ?? "MLA").toUpperCase()
 
-  if (q.trim().length < 2) {
+  if (q.length < 2) {
     return NextResponse.json({ results: [] })
   }
 
   try {
     const data = await searchMLCategories(q, siteId)
-    const results = data.map((item) => ({
+    const results = (data ?? []).map((item: Record<string, string>) => ({
       id: item.category_id,
       name: item.category_name,
       path: item.domain_id ?? item.category_name,
