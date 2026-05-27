@@ -1,31 +1,71 @@
 import Link from "next/link"
-import { CheckCircle2, Plus, ShoppingBag, AlertCircle } from "lucide-react"
+import Image from "next/image"
+import { Plus, AlertCircle, RefreshCw, Settings, History, ShoppingBag, CheckCircle2, XCircle, WifiOff } from "lucide-react"
 import { requireTenant } from "@/lib/tenant/context"
 import { listChannels } from "@/lib/channels/queries"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+
+export const dynamic = "force-dynamic"
 
 const PROVIDER_LABEL: Record<string, string> = {
   tiendanube: "Tienda Nube",
   mercadolibre: "Mercado Libre",
   shopify: "Shopify",
+  woocommerce: "WooCommerce",
   custom: "Custom",
 }
 
-const STATUS_VARIANT: Record<string, string> = {
-  connected: "bg-tertiary/15 text-tertiary border-tertiary/30",
-  disconnected: "bg-muted text-muted-foreground border-border",
-  error: "bg-destructive/15 text-destructive border-destructive/30",
-  revoked: "bg-destructive/15 text-destructive border-destructive/30",
+const PROVIDER_LOGO: Record<string, string> = {
+  tiendanube: "/channels/tiendanube.png",
+  mercadolibre: "/channels/mercadolibre.png",
+  shopify: "/channels/shopify.png",
+  woocommerce: "/channels/woocommerce.png",
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  connected: "Conectado",
-  disconnected: "Desconectado",
-  error: "Error",
-  revoked: "Revocado",
+const PROVIDER_COLOR: Record<string, string> = {
+  tiendanube: "bg-sky-500/10 border-sky-500/20",
+  mercadolibre: "bg-yellow-500/10 border-yellow-500/20",
+  shopify: "bg-green-500/10 border-green-500/20",
+  woocommerce: "bg-purple-500/10 border-purple-500/20",
+  custom: "bg-muted border-border",
+}
+
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return "Nunca"
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return "Hace un momento"
+  if (mins < 60) return `Hace ${mins} min`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `Hace ${hrs}h`
+  return `Hace ${Math.floor(hrs / 24)}d`
+}
+
+function StatusBadge({ status, lastError }: { status: string; lastError?: string | null }) {
+  if (status === "connected") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.5)]" />
+        Activo
+      </span>
+    )
+  }
+  if (status === "error") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+        Error
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+      Inactivo
+    </span>
+  )
 }
 
 export default async function ChannelsPage({
@@ -42,6 +82,7 @@ export default async function ChannelsPage({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
+      {/* Header */}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -50,7 +91,6 @@ export default async function ChannelsPage({
           <h1 className="font-display text-3xl font-bold text-foreground">Nodes</h1>
           <p className="mt-1 max-w-prose text-sm text-muted-foreground">
             Cada node es un canal de venta conectado al stock de este tenant: storefronts, marketplaces, feeds.
-            Tienda Nube es el primer provider soportado.
           </p>
         </div>
         <Button asChild className="shadow-signal">
@@ -61,18 +101,18 @@ export default async function ChannelsPage({
         </Button>
       </header>
 
+      {/* Error banner */}
       {error ? (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="flex items-start gap-3 p-4">
-            <AlertCircle className="mt-0.5 h-4 w-4 text-destructive" aria-hidden />
-            <div className="text-sm">
-              <p className="font-medium text-destructive">No se pudo completar la conexión</p>
-              <p className="text-muted-foreground">Detalle: {error}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+          <div className="text-sm">
+            <p className="font-medium text-destructive">No se pudo completar la conexión</p>
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+        </div>
       ) : null}
 
+      {/* Empty state */}
       {channels.length === 0 ? (
         <Empty>
           <EmptyHeader>
@@ -95,39 +135,116 @@ export default async function ChannelsPage({
         </Empty>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {channels.map((c) => (
-            <Card key={c.id} className="card-accent-primary">
-              <CardHeader className="space-y-1.5 pb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                    {PROVIDER_LABEL[c.provider] ?? c.provider}
-                  </p>
-                  <Badge variant="outline" className={STATUS_VARIANT[c.status] ?? ""}>
-                    {c.status === "connected" ? (
-                      <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden />
-                    ) : null}
-                    {STATUS_LABEL[c.status] ?? c.status}
-                  </Badge>
+          {channels.map((c) => {
+            const meta = c.metadata ?? {}
+            const lastExport = (meta.last_export as { at?: string; summary?: { created?: number; updated?: number; failed?: number } } | undefined)
+            const lastImport = (meta.last_import as { at?: string } | undefined)
+            const lastSyncAt = c.last_synced_at ?? lastExport?.at ?? lastImport?.at ?? null
+            const logo = PROVIDER_LOGO[c.provider]
+            const providerColor = PROVIDER_COLOR[c.provider] ?? PROVIDER_COLOR.custom
+
+            return (
+              <article
+                key={c.id}
+                className="group relative flex flex-col rounded-xl border border-border bg-card transition-shadow hover:shadow-lg hover:shadow-black/20"
+              >
+                {/* Card header */}
+                <div className="flex items-start justify-between gap-3 p-4 pb-3">
+                  <div className="flex items-center gap-3">
+                    {/* Provider logo */}
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${providerColor}`}>
+                      {logo ? (
+                        <Image
+                          src={logo}
+                          alt={PROVIDER_LABEL[c.provider] ?? c.provider}
+                          width={28}
+                          height={28}
+                          className="rounded object-contain"
+                        />
+                      ) : (
+                        <ShoppingBag className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                        {PROVIDER_LABEL[c.provider] ?? c.provider}
+                      </p>
+                      <p className="truncate font-semibold text-foreground leading-tight">
+                        {c.display_name ?? `Tienda #${c.external_id}`}
+                      </p>
+                    </div>
+                  </div>
+                  <StatusBadge status={c.status} lastError={c.last_error} />
                 </div>
-                <CardTitle className="text-lg">{c.display_name ?? `Tienda ${c.external_id}`}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0 text-sm text-muted-foreground">
-                {c.store_url ? (
-                  <p className="font-mono text-xs text-foreground/80">{c.store_url}</p>
+
+                {/* Error message */}
+                {(c.status === "error" || c.status === "revoked") && c.last_error ? (
+                  <div className="mx-4 mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-destructive">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span className="line-clamp-2">{c.last_error}</span>
+                  </div>
                 ) : null}
-                <div className="flex items-center gap-3 text-xs">
-                  {c.country ? <span>{c.country}</span> : null}
-                  {c.currency ? <span>· {c.currency}</span> : null}
-                  <span>· #{c.external_id}</span>
+
+                {/* Sync stats */}
+                <div className="mx-4 mb-3 grid grid-cols-2 gap-px rounded-lg border border-border bg-border overflow-hidden text-xs">
+                  <div className="flex flex-col gap-0.5 bg-card px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Última sync</span>
+                    <span className="font-medium text-foreground">{formatRelativeTime(lastSyncAt)}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 bg-card px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Último export</span>
+                    <span className="font-medium text-foreground">
+                      {lastExport?.summary
+                        ? `${lastExport.summary.created ?? 0}C · ${lastExport.summary.updated ?? 0}A · ${lastExport.summary.failed ?? 0}E`
+                        : "—"}
+                    </span>
+                  </div>
                 </div>
-                <div className="pt-2">
-                  <Button asChild variant="outline" size="sm" className="w-full">
-                    <Link href={`/app/${slug}/channels/${c.id}`}>Administrar</Link>
-                  </Button>
+
+                {/* Meta info */}
+                <div className="mx-4 mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  {c.store_url ? (
+                    <span className="truncate font-mono text-foreground/60">{c.store_url}</span>
+                  ) : null}
+                  {!c.store_url && (
+                    <>
+                      {c.country ? <span>{c.country}</span> : null}
+                      {c.currency ? <span>· {c.currency}</span> : null}
+                      {c.external_id ? <span>· #{c.external_id}</span> : null}
+                    </>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                {/* Divider */}
+                <div className="mt-auto border-t border-border" />
+
+                {/* Actions */}
+                <div className="grid grid-cols-3 divide-x divide-border">
+                  <Link
+                    href={`/app/${slug}/channels/${c.id}`}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    Gestionar
+                  </Link>
+                  <Link
+                    href={`/app/${slug}/channels/${c.id}`}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Sync
+                  </Link>
+                  <Link
+                    href={`/app/${slug}/channels/${c.id}/sync-log`}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  >
+                    <History className="h-3.5 w-3.5" />
+                    Logs
+                  </Link>
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
     </div>
