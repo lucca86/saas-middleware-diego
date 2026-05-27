@@ -152,14 +152,14 @@ export default async function ChannelsPage({
                 <div className="flex items-start justify-between gap-3 p-4 pb-3">
                   <div className="flex items-center gap-3">
                     {/* Provider logo */}
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${providerColor}`}>
+                    <div className={`flex h-10 w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 ${providerColor}`}>
                       {logo ? (
                         <Image
                           src={logo}
                           alt={PROVIDER_LABEL[c.provider] ?? c.provider}
-                          width={28}
-                          height={28}
-                          className="rounded object-contain"
+                          width={52}
+                          height={20}
+                          className="object-contain"
                         />
                       ) : (
                         <ShoppingBag className="h-5 w-5 text-muted-foreground" />
