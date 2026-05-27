@@ -19,7 +19,7 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 const PROVIDER_LOGO: Record<string, string> = {
   tiendanube: "/channels/tiendanube.png",
-  mercadolibre: "/channels/mercadolibre.png",
+  mercadolibre: "/channels/mercadolibre-iso.png",
   shopify: "/channels/shopify.png",
   woocommerce: "/channels/woocommerce.png",
 }
@@ -152,13 +152,13 @@ export default async function ChannelsPage({
                 <div className="flex items-start justify-between gap-3 p-4 pb-3">
                   <div className="flex items-center gap-3">
                     {/* Provider logo */}
-                    <div className={`flex h-10 w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 ${providerColor}`}>
+                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${providerColor}`}>
                       {logo ? (
                         <Image
                           src={logo}
                           alt={PROVIDER_LABEL[c.provider] ?? c.provider}
-                          width={52}
-                          height={20}
+                          width={40}
+                          height={40}
                           className="object-contain"
                         />
                       ) : (
