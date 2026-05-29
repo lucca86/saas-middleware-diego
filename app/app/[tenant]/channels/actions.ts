@@ -249,15 +249,24 @@ export async function connectWooCommerce(
   }
 
   const creds: WooCredentials = { storeUrl, consumerKey, consumerSecret }
-  let info
+
+  // Try to validate credentials against the live store. If the store is
+  // behind Cloudflare or a WAF that blocks server-side requests, we skip
+  // validation and save the credentials anyway — the user can verify from
+  // the channel detail page once connected.
+  let info: { name: string; url: string; currency: string | null; country: string | null } | null = null
+  let connectWarning: string | null = null
   try {
     info = await fetchStoreInfo(creds)
-  } catch (err) {
-    return {
-      ok: false as const,
-      error: err instanceof Error ? err.message : "No se pudo conectar con WooCommerce.",
-    }
+  } catch {
+    connectWarning =
+      "No se pudo verificar la conexión automáticamente (el sitio puede tener un firewall activo). " +
+      "Las credenciales fueron guardadas — verificá la conexión desde el panel del canal."
   }
+
+  const name = info?.name ?? (() => {
+    try { return new URL(storeUrl).hostname.replace(/^www\./, "") } catch { return storeUrl }
+  })()
 
   // Use the normalized URL as external_id so re-connecting the same store
   // updates the existing row instead of creating duplicates.
@@ -276,17 +285,17 @@ export async function connectWooCommerce(
     tenant_id: tenant.id,
     provider: "woocommerce" as const,
     external_id: externalId,
-    display_name: info.name,
-    store_url: info.url,
-    country: info.country,
-    currency: info.currency,
+    display_name: name,
+    store_url: info?.url ?? storeUrl,
+    country: info?.country ?? null,
+    currency: info?.currency ?? null,
     access_token: consumerKey,
     refresh_token: consumerSecret,
     token_expires_at: null,
     scopes: ["read_write"],
     status: "connected" as const,
-    last_error: null,
-    metadata: { store_name: info.name } as Record<string, unknown>,
+    last_error: connectWarning,
+    metadata: { store_name: name } as Record<string, unknown>,
     connected_at: new Date().toISOString(),
   }
 
@@ -307,11 +316,8 @@ export async function connectWooCommerce(
   }
 
   revalidatePath(`/app/${tenantSlug}/channels`)
-  return { ok: true as const, channelId }
-}
-
-/**
- * Trigger the one-shot WooCommerce → Stockcurve import for a connected
+  return { ok: true as const, channelId, warning: connectWarning ?? undefined }
+} → Stockcurve import for a connected
  * channel. Guarded by the existence of `metadata.last_import`: once any
  * import has run, subsequent calls require an explicit re-import flag so
  * the user can't accidentally pull twice and create duplicate type

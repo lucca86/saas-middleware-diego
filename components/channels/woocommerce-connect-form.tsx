@@ -40,7 +40,11 @@ export function WooCommerceConnectForm({ tenantSlug }: { tenantSlug: string }) {
         toast.error(res.error)
         return
       }
-      toast.success("WooCommerce conectado")
+      if (res.warning) {
+        toast.warning(res.warning, { duration: 8000 })
+      } else {
+        toast.success("WooCommerce conectado correctamente.")
+      }
       router.push(`/app/${tenantSlug}/channels/${res.channelId}?connected=1`)
     })
   }
@@ -125,7 +129,7 @@ export function WooCommerceConnectForm({ tenantSlug }: { tenantSlug: string }) {
 
       <Button type="submit" className="w-full" disabled={pending}>
         <Lock className="mr-1.5 h-4 w-4" />
-        {pending ? "Verificando…" : "Conectar con WooCommerce"}
+        {pending ? "Conectando…" : "Conectar con WooCommerce"}
       </Button>
     </form>
   )
