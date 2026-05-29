@@ -1,6 +1,7 @@
 "use client"
 
 import { LogOut, Settings, Users } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -31,6 +32,12 @@ function initials(source: string | null) {
 
 export function UserMenu({ fullName, email, avatarUrl, tenantSlug }: UserMenuProps) {
   const label = fullName || email || "Mi cuenta"
+  const router = useRouter()
+
+  async function handleSignOut() {
+    await fetch("/auth/sign-out", { method: "POST" })
+    router.push("/auth/login")
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -68,16 +75,12 @@ export function UserMenu({ fullName, email, avatarUrl, tenantSlug }: UserMenuPro
           </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <form action="/auth/sign-out" method="post" className="w-full">
-            <button
-              type="submit"
-              className="flex w-full cursor-pointer items-center text-destructive focus:text-destructive"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Cerrar sesión
-            </button>
-          </form>
+        <DropdownMenuItem
+          className="cursor-pointer text-destructive focus:text-destructive"
+          onSelect={handleSignOut}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Cerrar sesión
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
