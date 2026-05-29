@@ -1,6 +1,7 @@
 "use client"
 
 import { LogOut, Settings, Users } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -35,7 +36,8 @@ export function UserMenu({ fullName, email, avatarUrl, tenantSlug }: UserMenuPro
   const router = useRouter()
 
   async function handleSignOut() {
-    await fetch("/auth/sign-out", { method: "POST" })
+    const supabase = createClient()
+    await supabase.auth.signOut()
     router.push("/auth/login")
   }
   return (
