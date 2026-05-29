@@ -172,7 +172,12 @@ async function ensureWooProductType(
 
   const { data: created, error } = await service
     .from("product_types")
-    .insert({ tenant_id: tenantId, name: "WooCommerce", attributes: merged })
+    .insert({
+      tenant_id: tenantId,
+      name: "WooCommerce",
+      slug: "woocommerce",
+      attributes: merged,
+    })
     .select("id")
     .single()
   if (error) throw new Error(`product_types: ${error.message}`)
