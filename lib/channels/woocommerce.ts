@@ -105,6 +105,10 @@ async function wcRequest<T>(
       Accept: "application/json",
       "Content-Type": "application/json",
       Authorization: authHeader(creds),
+      // Some stores run behind Cloudflare which blocks requests without a
+      // recognisable User-Agent. Sending a generic browser UA avoids 403s.
+      "User-Agent":
+        "Mozilla/5.0 (compatible; Stockcurve/1.0; +https://stockcurve.com) AppleWebKit/537.36",
       ...(init.headers ?? {}),
     },
     // Avoid Next caching API responses across requests
@@ -130,29 +134,53 @@ async function wcRequest<T>(
 /**
  * Validates credentials by hitting the system_status endpoint. Returns a
  * minimal description we cache in `sales_channels` for display.
+ *
+ * Falls back to /products?per_page=1 if system_status is blocked by a WAF
+ * (e.g. Cloudflare returning 403 on that specific endpoint).
  */
 export async function fetchStoreInfo(creds: WooCredentials): Promise<WooStoreInfo> {
-  // /system_status is the most reliable identity probe; it requires
-  // read auth and returns environment + settings without listing data.
-  const { data } = await wcRequest<{
-    settings: { currency: string; currency_symbol: string }
-    environment: { site_url: string; home_url: string; version: string }
-  }>(creds, "/system_status")
+  const storeUrlNorm = normalizeStoreUrl(creds.storeUrl)
 
-  const url = data.environment?.home_url ?? data.environment?.site_url ?? normalizeStoreUrl(creds.storeUrl)
-  const name = (() => {
-    try {
-      return new URL(url).hostname.replace(/^www\./, "")
-    } catch {
-      return url
+  try {
+    const { data } = await wcRequest<{
+      settings: { currency: string; currency_symbol: string }
+      environment: { site_url: string; home_url: string; version: string }
+    }>(creds, "/system_status")
+
+    const url = data.environment?.home_url ?? data.environment?.site_url ?? storeUrlNorm
+    const name = (() => {
+      try { return new URL(url).hostname.replace(/^www\./, "") } catch { return url }
+    })()
+
+    return {
+      name,
+      url,
+      currency: data.settings?.currency ?? null,
+      country: null,
     }
-  })()
+  } catch (err) {
+    // If /system_status is blocked (WAF/Cloudflare 403), fall back to a
+    // lighter endpoint that is rarely gated: /products?per_page=1.
+    // We just need to confirm the credentials work; product data is ignored.
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes("403")) throw err
 
-  return {
-    name,
-    url,
-    currency: data.settings?.currency ?? null,
-    country: null, // WC doesn't expose store country reliably via REST.
+    try {
+      await wcRequest(creds, "/products?per_page=1")
+    } catch (fallbackErr) {
+      // Re-throw the original 403 with a clearer message
+      throw new Error(
+        "La tienda bloqueó la verificación (posiblemente Cloudflare o un firewall). " +
+        "Verificá que las claves sean correctas y que tu sitio permita requests de API externas. " +
+        `Detalle: ${msg}`,
+      )
+    }
+
+    // Credentials work — build store info from the URL alone
+    const name = (() => {
+      try { return new URL(storeUrlNorm).hostname.replace(/^www\./, "") } catch { return storeUrlNorm }
+    })()
+    return { name, url: storeUrlNorm, currency: null, country: null }
   }
 }
 
