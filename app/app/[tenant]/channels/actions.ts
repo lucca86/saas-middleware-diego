@@ -317,11 +317,13 @@ export async function connectWooCommerce(
 
   revalidatePath(`/app/${tenantSlug}/channels`)
   return { ok: true as const, channelId, warning: connectWarning ?? undefined }
-} → Stockcurve import for a connected
- * channel. Guarded by the existence of `metadata.last_import`: once any
- * import has run, subsequent calls require an explicit re-import flag so
- * the user can't accidentally pull twice and create duplicate type
- * attribute entries.
+}
+
+/**
+ * Stockcurve import for a connected channel. Guarded by the existence of
+ * `metadata.last_import`: once any import has run, subsequent calls require
+ * an explicit re-import flag so the user can't accidentally pull twice and
+ * create duplicate type attribute entries.
  */
 export async function importWooCommerce(
   tenantSlug: string,
