@@ -250,18 +250,23 @@ export async function connectWooCommerce(
 
   const creds: WooCredentials = { storeUrl, consumerKey, consumerSecret }
 
-  // Try to validate credentials against the live store. If the store is
-  // behind Cloudflare or a WAF that blocks server-side requests, we skip
-  // validation and save the credentials anyway — the user can verify from
-  // the channel detail page once connected.
+  // Try to validate credentials. Only bypass if the store is behind a WAF
+  // (Cloudflare "Just a moment" 403). All other errors (401 bad credentials,
+  // unreachable URL, etc.) are real and must block the connection.
   let info: { name: string; url: string; currency: string | null; country: string | null } | null = null
   let connectWarning: string | null = null
   try {
     info = await fetchStoreInfo(creds)
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    // 403 with Cloudflare HTML = WAF block, not a credential error → save anyway
+    const isWafBlock = msg.includes("403") && msg.toLowerCase().includes("just a moment")
+    if (!isWafBlock) {
+      return { ok: false as const, error: msg }
+    }
     connectWarning =
-      "No se pudo verificar la conexión automáticamente (el sitio puede tener un firewall activo). " +
-      "Las credenciales fueron guardadas — verificá la conexión desde el panel del canal."
+      "Las credenciales fueron guardadas, pero no se pudo verificar la conexión " +
+      "porque el sitio tiene Cloudflare activo. Hacé un sync de prueba para confirmar que funciona."
   }
 
   const name = info?.name ?? (() => {
