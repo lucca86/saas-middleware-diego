@@ -86,26 +86,38 @@ async function wcFetch(
   return res.json()
 }
 
-/** Convert SC variant attributes { Color: ["Rojo"] } → WC attribute array. */
+/** Convert SC variant attributes { Color: ["Rojo"] | "Rojo" } → WC attribute array. */
 function scAttrsToWoo(
-  attrs: Record<string, string[]> | null,
+  attrs: Record<string, unknown> | null,
 ): Array<{ name: string; option: string }> {
-  if (!attrs) return []
-  return Object.entries(attrs).flatMap(([name, opts]) =>
-    opts.map((option) => ({ name, option })),
-  )
+  if (!attrs || typeof attrs !== "object") return []
+  return Object.entries(attrs).flatMap(([name, raw]) => {
+    const opts: string[] = Array.isArray(raw)
+      ? (raw as unknown[]).map(String)
+      : raw != null
+        ? [String(raw)]
+        : []
+    return opts.map((option) => ({ name, option }))
+  })
 }
 
 /** Build the global attribute list for a variable product from all its variants. */
 function buildProductAttributes(
-  variants: Array<{ attributes: Record<string, string[]> | null }>,
+  variants: Array<{ attributes: Record<string, unknown> | null }>,
 ): Array<{ name: string; variation: boolean; visible: boolean; options: string[] }> {
   const map = new Map<string, Set<string>>()
   for (const v of variants) {
-    if (!v.attributes) continue
-    for (const [name, opts] of Object.entries(v.attributes)) {
+    if (!v.attributes || typeof v.attributes !== "object") continue
+    for (const [name, raw] of Object.entries(v.attributes)) {
+      // opts may be a string[], a string, or anything — normalise to string[]
+      const opts: string[] = Array.isArray(raw)
+        ? (raw as unknown[]).map(String)
+        : raw != null
+          ? [String(raw)]
+          : []
+      if (opts.length === 0) continue
       if (!map.has(name)) map.set(name, new Set())
-      opts.forEach((o) => map.get(name)!.add(o))
+      for (const o of opts) map.get(name)!.add(o)
     }
   }
   return Array.from(map.entries()).map(([name, opts]) => ({
