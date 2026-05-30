@@ -5,6 +5,7 @@ import { requireTenant } from "@/lib/tenant/context"
 import { getChannel } from "@/lib/channels/queries"
 import { ChannelDetailClient } from "@/components/channels/channel-detail-client"
 import { WooCommerceImportCard } from "@/components/channels/woocommerce-import-card"
+import { WooCommerceSyncCard } from "@/components/channels/woocommerce-sync-card"
 import { TiendaNubeImportCard } from "@/components/channels/tiendanube-import-card"
 import { MercadoLibreSyncCard } from "@/components/channels/mercadolibre-sync-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -223,23 +224,42 @@ export default async function ChannelDetailPage({
           }
         />
       ) : channel.provider === "woocommerce" ? (
-        <WooCommerceImportCard
-          tenantSlug={slug}
-          channelId={channel.id}
-          canManage={canManage}
-          lastImportAt={
-            typeof meta.last_import_at === "string" ? (meta.last_import_at as string) : null
-          }
-          lastImportSummary={
-            (meta.last_import_summary as {
-              total: number
-              imported: number
-              skipped: number
-              failed: number
-              errors: string[]
-            } | null) ?? null
-          }
-        />
+        <div className="flex flex-col gap-4">
+          <WooCommerceImportCard
+            tenantSlug={slug}
+            channelId={channel.id}
+            canManage={canManage}
+            lastImportAt={
+              typeof meta.last_import_at === "string" ? (meta.last_import_at as string) : null
+            }
+            lastImportSummary={
+              (meta.last_import_summary as {
+                total: number
+                imported: number
+                skipped: number
+                failed: number
+                errors: string[]
+              } | null) ?? null
+            }
+          />
+          <WooCommerceSyncCard
+            tenantId={tenant.id}
+            channelId={channel.id}
+            tenantSlug={slug}
+            canManage={canManage}
+            lastExportAt={typeof meta.last_export === "string" ? meta.last_export : null}
+            lastExportSummary={
+              (meta.last_export_summary as {
+                total: number
+                created: number
+                updated: number
+                skipped: number
+                failed: number
+                errors: string[]
+              } | null) ?? null
+            }
+          />
+        </div>
       ) : channel.provider === "tiendanube" ? (
         <TiendaNubeImportCard
           tenantSlug={slug}
