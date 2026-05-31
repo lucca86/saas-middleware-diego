@@ -272,6 +272,7 @@ async function importOneProduct(
         woo_id: wc.id,
         channel_id: channelId,
         wc_currency: currency,
+        tags: (wc.tags ?? []).map((t) => t.name).filter(Boolean),
       },
     })
     .select("id")
