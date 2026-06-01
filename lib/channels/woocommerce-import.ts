@@ -259,6 +259,8 @@ async function importOneProduct(
   // ── 1. Insert product ────────────────────────────────────────────────────
   const productSlug = `${slugify(wc.slug || wc.name)}-${wc.id}`
 
+  const tagNames = (wc.tags ?? []).map((t) => t.name).filter(Boolean)
+
   const { data: product, error: productErr } = await service
     .from("products")
     .insert({
@@ -268,11 +270,11 @@ async function importOneProduct(
       slug: productSlug,
       description: wc.description || wc.short_description || null,
       status: mapProductStatus(wc.status),
+      tags: tagNames.length > 0 ? tagNames : null,
       attributes: {
         woo_id: wc.id,
         channel_id: channelId,
         wc_currency: currency,
-        tags: (wc.tags ?? []).map((t) => t.name).filter(Boolean),
       },
     })
     .select("id")
@@ -412,22 +414,42 @@ async function importOneProduct(
     throw new Error(`Mappings: ${mapErr.message}`)
   }
 
-  // ── 5. Images (fire-and-forget per image; never roll back for image failures) ─
-  const imageUrls: string[] = []
-  for (const img of (wc.images ?? []).slice(0, 8)) {
-    try {
-      const url = await downloadAndUpload(img.src, tenantId, productId)
-      imageUrls.push(url)
-    } catch {
-      imageUrls.push(img.src)
-    }
-  }
+  // ── 5. Images → product_images table ────────────────────────────────────
+  const wcImages = (wc.images ?? []).slice(0, 8)
+  if (wcImages.length > 0) {
+    const imageRows: Array<{
+      product_id: string
+      url: string
+      position: number
+      is_primary: boolean
+      alt: string | null
+    }> = []
 
-  if (imageUrls.length > 0) {
-    await service
-      .from("products")
-      .update({ images: imageUrls })
-      .eq("id", productId)
+    for (let idx = 0; idx < wcImages.length; idx++) {
+      const img = wcImages[idx]
+      try {
+        const url = await downloadAndUpload(img.src, tenantId, productId)
+        imageRows.push({
+          product_id: productId,
+          url,
+          position: idx,
+          is_primary: idx === 0,
+          alt: img.alt || img.name || null,
+        })
+      } catch {
+        imageRows.push({
+          product_id: productId,
+          url: img.src,
+          position: idx,
+          is_primary: idx === 0,
+          alt: img.alt || img.name || null,
+        })
+      }
+    }
+
+    // Delete any existing images for idempotency then insert fresh
+    await service.from("product_images").delete().eq("product_id", productId)
+    await service.from("product_images").insert(imageRows)
   }
 
   return "imported"
