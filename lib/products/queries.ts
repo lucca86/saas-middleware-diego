@@ -135,6 +135,10 @@ export async function listProducts(
       images.find((i) => i.is_primary) ??
       [...images].sort((a, b) => a.position - b.position)[0] ??
       null
+    // Use R2 proxy when storage_key exists, otherwise fall back to the raw URL
+    const primaryImageUrl = primary
+      ? (imageProxyUrl(primary.storage_key) ?? primary.url ?? null)
+      : null
     return {
       id: p.id,
       tenant_id: p.tenant_id,
@@ -155,7 +159,7 @@ export async function listProducts(
       min_price: prices.length > 0 ? Math.min(...prices) : null,
       type_name: ptype?.name ?? null,
       category_name: cat?.name ?? null,
-      primary_image_url: imageProxyUrl(primary?.storage_key) ?? null,
+      primary_image_url: primaryImageUrl,
     } as ProductWithCounts
   })
 }

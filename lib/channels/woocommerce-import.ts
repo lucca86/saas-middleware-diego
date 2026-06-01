@@ -184,7 +184,32 @@ async function ensureWooProductType(
   return created.id as string
 }
 
-// ─── Image download + R2 upload ───────────────────────────────────────────────
+// ─── Category upsert ──────────────────────────────────────────────────────────
+
+async function ensureCategory(
+  service: ReturnType<typeof createServiceClient>,
+  tenantId: string,
+  wcCat: { id: number; name: string; slug: string },
+): Promise<string> {
+  const slug = wcCat.slug || slugify(wcCat.name) || `wc-cat-${wcCat.id}`
+  const { data: existing } = await service
+    .from("categories")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("slug", slug)
+    .maybeSingle()
+  if (existing?.id) return existing.id as string
+
+  const { data: created, error } = await service
+    .from("categories")
+    .insert({ tenant_id: tenantId, name: wcCat.name, slug })
+    .select("id")
+    .single()
+  if (error) throw new Error(`category: ${error.message}`)
+  return created.id as string
+}
+
+
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"])
 const MAX_BYTES = 8 * 1024 * 1024
@@ -261,11 +286,23 @@ async function importOneProduct(
 
   const tagNames = (wc.tags ?? []).map((t) => t.name).filter(Boolean)
 
+  // Resolve category: use the first WC category, create if not exists
+  let categoryId: string | null = null
+  const firstCat = (wc.categories ?? [])[0]
+  if (firstCat) {
+    try {
+      categoryId = await ensureCategory(service, tenantId, firstCat)
+    } catch {
+      // non-fatal — product imports without category
+    }
+  }
+
   const { data: product, error: productErr } = await service
     .from("products")
     .insert({
       tenant_id: tenantId,
       type_id: typeId,
+      category_id: categoryId,
       name: wc.name,
       slug: productSlug,
       description: wc.description || wc.short_description || null,
@@ -417,37 +454,46 @@ async function importOneProduct(
   // ── 5. Images → product_images table ────────────────────────────────────
   const wcImages = (wc.images ?? []).slice(0, 8)
   if (wcImages.length > 0) {
-    const imageRows: Array<{
+    type ImageRow = {
+      tenant_id: string
       product_id: string
+      storage_key: string | null
       url: string
       position: number
       is_primary: boolean
       alt: string | null
-    }> = []
+    }
+    const imageRows: ImageRow[] = []
 
     for (let idx = 0; idx < wcImages.length; idx++) {
       const img = wcImages[idx]
+      let finalUrl = img.src
+      let storageKey: string | null = null
+
       try {
-        const url = await downloadAndUpload(img.src, tenantId, productId)
-        imageRows.push({
-          product_id: productId,
-          url,
-          position: idx,
-          is_primary: idx === 0,
-          alt: img.alt || img.name || null,
-        })
+        const uploaded = await downloadAndUpload(img.src, tenantId, productId)
+        // If R2 is configured, downloadAndUpload returns the R2 public URL.
+        // Extract the storage_key from the URL (everything after the public base).
+        const r2Public = process.env.R2_PUBLIC_URL?.replace(/\/$/, "")
+        if (r2Public && uploaded.startsWith(r2Public)) {
+          storageKey = uploaded.slice(r2Public.length + 1) // strip leading "/"
+        }
+        finalUrl = uploaded
       } catch {
-        imageRows.push({
-          product_id: productId,
-          url: img.src,
-          position: idx,
-          is_primary: idx === 0,
-          alt: img.alt || img.name || null,
-        })
+        // fallback: keep original WC URL
       }
+
+      imageRows.push({
+        tenant_id: tenantId,
+        product_id: productId,
+        storage_key: storageKey,
+        url: finalUrl,
+        position: idx,
+        is_primary: idx === 0,
+        alt: img.alt || img.name || null,
+      })
     }
 
-    // Delete any existing images for idempotency then insert fresh
     await service.from("product_images").delete().eq("product_id", productId)
     await service.from("product_images").insert(imageRows)
   }
