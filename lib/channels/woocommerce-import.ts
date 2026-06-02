@@ -307,7 +307,7 @@ async function importOneProduct(
       slug: productSlug,
       description: wc.description || wc.short_description || null,
       status: mapProductStatus(wc.status),
-      tags: tagNames.length > 0 ? tagNames : null,
+      tags: tagNames.length > 0 ? tagNames : [],
       attributes: {
         woo_id: wc.id,
         channel_id: channelId,
