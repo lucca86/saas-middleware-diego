@@ -267,7 +267,7 @@ async function importOneProduct(
 ): Promise<"imported" | "skipped"> {
   const { tenantId, channelId, creds, currency } = opts
 
-  // Idempotency: skip if already mapped
+  // Idempotency: if already mapped, update existing product (images/tags/category may be missing)
   const { data: dup } = await service
     .from("channel_product_mappings")
     .select("product_id")
@@ -275,7 +275,48 @@ async function importOneProduct(
     .eq("external_product_id", String(wc.id))
     .is("external_variant_id", null)
     .maybeSingle()
-  if (dup?.product_id) return "skipped"
+
+  if (dup?.product_id) {
+    // Patch tags, category and images on existing product
+    const tagNames = (wc.tags ?? []).map((t) => t.name).filter(Boolean)
+    let categoryId: string | null = null
+    const firstCat = (wc.categories ?? [])[0]
+    if (firstCat) {
+      try { categoryId = await ensureCategory(service, tenantId, firstCat) } catch { /* non-fatal */ }
+    }
+    await service
+      .from("products")
+      .update({
+        tags: tagNames.length > 0 ? tagNames : [],
+        ...(categoryId ? { category_id: categoryId } : {}),
+      })
+      .eq("id", dup.product_id)
+
+    // Re-sync images
+    const wcImages = (wc.images ?? []).slice(0, 8)
+    if (wcImages.length > 0) {
+      const hasImages = await service
+        .from("product_images")
+        .select("id")
+        .eq("product_id", dup.product_id)
+        .limit(1)
+        .maybeSingle()
+      if (!hasImages.data) {
+        // Only insert images if none exist yet
+        const imageRows = wcImages.map((img, idx) => ({
+          tenant_id: tenantId,
+          product_id: dup.product_id,
+          storage_key: null as string | null,
+          url: img.src,
+          position: idx,
+          is_primary: idx === 0,
+          alt: img.alt || img.name || null,
+        }))
+        await service.from("product_images").insert(imageRows)
+      }
+    }
+    return "skipped"
+  }
 
   // Fetch variations before any DB writes so a WC API failure doesn't leave partial data
   const variations: WooVariation[] =
