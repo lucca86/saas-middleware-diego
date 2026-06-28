@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   const tokenValid = !token || token === (channel.access_token ?? "")
   const storeValid = !storeIdHeader || storeIdHeader === String(channel.external_id ?? "")
   if (!tokenValid || !storeValid) {
-    console.error("[v0] TN webhook: auth mismatch for channel", channelId)
+    console.error("[sc] TN webhook: auth mismatch for channel", channelId)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -107,10 +107,10 @@ export async function POST(request: Request) {
         payload: { tn_product_id: payload.id, topic },
       })
     } else {
-      console.log("[v0] TN webhook: unhandled topic", topic)
+      console.log("[sc] TN webhook: unhandled topic", topic)
     }
   } catch (err) {
-    console.error("[v0] TN webhook handler error:", err)
+    console.error("[sc] TN webhook handler error:", err)
     void writeSyncLogWebhook({
       tenantId: channel.tenant_id,
       channelId,

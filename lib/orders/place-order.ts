@@ -148,14 +148,14 @@ export async function placeOrder(
     .single()
 
   if (insertErr || !order) {
-    console.log("[v0] order insert error:", insertErr?.message)
+    console.log("[sc] order insert error:", insertErr?.message)
     return { ok: false, error: "No pudimos registrar el pedido" }
   }
 
   const itemsPayload = items.map((it) => ({ ...it, order_id: order.id, tenant_id: tenant.id }))
   const { error: itemsErr } = await supabase.from("order_items").insert(itemsPayload)
   if (itemsErr) {
-    console.log("[v0] order_items insert error:", itemsErr.message)
+    console.log("[sc] order_items insert error:", itemsErr.message)
     // Roll back the order to keep the DB consistent.
     await supabase.from("orders").delete().eq("id", order.id)
     return { ok: false, error: "No pudimos registrar el pedido" }

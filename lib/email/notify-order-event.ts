@@ -26,7 +26,7 @@ export async function notifyOrderEvent(
 ): Promise<void> {
   try {
     if (!isEmailConfigured()) {
-      console.log("[v0] email skip (no RESEND_API_KEY):", event, orderId)
+      console.log("[sc] email skip (no RESEND_API_KEY):", event, orderId)
       return
     }
 
@@ -57,7 +57,7 @@ export async function notifyOrderEvent(
     const config = (tenant.storefront_config ?? {}) as StorefrontConfig
     const from = config.from_email?.trim()
     if (!from) {
-      console.log("[v0] email skip (no from_email):", tenant.slug, event)
+      console.log("[sc] email skip (no from_email):", tenant.slug, event)
       return
     }
 
@@ -84,7 +84,7 @@ export async function notifyOrderEvent(
         : order.customer_email
 
     if (!to) {
-      console.log("[v0] email skip (no recipient):", event, orderId)
+      console.log("[sc] email skip (no recipient):", event, orderId)
       return
     }
 
@@ -101,14 +101,14 @@ export async function notifyOrderEvent(
     })
 
     if (error) {
-      console.log("[v0] email send error:", event, error.message)
+      console.log("[sc] email send error:", event, error.message)
     } else {
-      console.log("[v0] email sent:", event, orderId, "→", to)
+      console.log("[sc] email sent:", event, orderId, "→", to)
     }
   } catch (e) {
     // Never let email errors break the calling flow.
     console.log(
-      "[v0] notifyOrderEvent crash:",
+      "[sc] notifyOrderEvent crash:",
       event,
       orderId,
       e instanceof Error ? e.message : String(e),

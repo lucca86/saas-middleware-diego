@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   // registration), log a warning but still accept — the operator should
   // register the secret before going live.
   if (secret && signature && !verifySignature(rawBody, signature, secret)) {
-    console.error("[v0] WC webhook: invalid signature for channel", channelId)
+    console.error("[sc] WC webhook: invalid signature for channel", channelId)
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
   }
 
@@ -104,10 +104,10 @@ export async function POST(request: Request) {
       })
     } else {
       // Unknown topic — acknowledge silently so WC doesn't disable the webhook.
-      console.log("[v0] WC webhook: unhandled topic", topic)
+      console.log("[sc] WC webhook: unhandled topic", topic)
     }
   } catch (err) {
-    console.error("[v0] WC webhook handler error:", err)
+    console.error("[sc] WC webhook handler error:", err)
     void writeSyncLogWebhook({
       tenantId: channel.tenant_id,
       channelId,

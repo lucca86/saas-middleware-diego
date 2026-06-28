@@ -79,7 +79,7 @@ export async function GET(
     if (code === "NoSuchKey" || code === "NotFound") {
       return new NextResponse("Not found", { status: 404 })
     }
-    console.error("[v0] image proxy error", err)
+    console.error("[sc] image proxy error", err)
     return new NextResponse("Internal error", { status: 500 })
   }
 }

@@ -9,11 +9,10 @@ import { createClient } from "@/lib/supabase/server"
  * We do this server-side instead of calling supabase.auth.signInWithPassword
  * from the browser for two reasons:
  *
- *  1. The browser client tries to set Supabase auth cookies on the current
- *     origin. In sandboxed previews (vusercontent.net) third-party cookie
- *     restrictions can cause the cookies to silently fail, leaving the user
- *     "logged in" client-side but invisible to the server, which then
- *     bounces them back to /auth/login on the next navigation.
+ *  1. El browser client intenta setear las cookies de Supabase en el origen
+ *     actual. En entornos con restricciones de third-party cookies las cookies
+ *     pueden fallar silenciosamente, dejando al usuario "logueado" client-side
+ *     pero invisible para el servidor, que lo redirige de vuelta a /auth/login.
  *  2. Server actions give us a deterministic redirect after the cookies are
  *     attached to the response, instead of relying on router.push +
  *     router.refresh which races with cookie propagation.
@@ -31,11 +30,11 @@ export async function signInAction(_: unknown, formData: FormData): Promise<{ er
   }
 
   const supabase = await createClient()
-  console.log("[v0] login attempt:", email)
+  console.log("[sc] login attempt:", email)
   const { error, data } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
-    console.log("[v0] login error:", error.message)
+    console.log("[sc] login error:", error.message)
     // Map a couple of well-known Supabase errors to friendlier copy.
     const msg =
       error.message === "Invalid login credentials"
@@ -43,7 +42,7 @@ export async function signInAction(_: unknown, formData: FormData): Promise<{ er
         : error.message
     return { error: msg }
   }
-  console.log("[v0] login ok, user:", data.user?.id)
+  console.log("[sc] login ok, user:", data.user?.id)
 
   // Only redirect to safe internal paths to prevent open-redirect.
   const target = next.startsWith("/") && !next.startsWith("//") ? next : "/select-tenant"

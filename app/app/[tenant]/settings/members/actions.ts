@@ -75,7 +75,7 @@ export async function inviteMemberAction(
   )
 
   if (error) {
-    console.log("[v0] invite insert error:", error)
+    console.log("[sc] invite insert error:", error)
     if (error.code === "42501") {
       return { ok: false, error: "No tenés permisos para invitar" }
     }
@@ -103,7 +103,7 @@ export async function updateMemberRoleAction(
     .neq("role", "owner")
 
   if (error) {
-    console.log("[v0] update role error:", error)
+    console.log("[sc] update role error:", error)
     return { ok: false, error: "No pudimos actualizar el rol" }
   }
 
@@ -126,7 +126,7 @@ export async function removeMemberAction(
     .neq("role", "owner")
 
   if (error) {
-    console.log("[v0] remove member error:", error)
+    console.log("[sc] remove member error:", error)
     return { ok: false, error: "No pudimos quitar al miembro" }
   }
 
@@ -148,7 +148,7 @@ export async function revokeInvitationAction(
     .eq("id", invitationId)
 
   if (error) {
-    console.log("[v0] revoke invitation error:", error)
+    console.log("[sc] revoke invitation error:", error)
     return { ok: false, error: "No pudimos revocar la invitación" }
   }
 

@@ -26,7 +26,6 @@ export const metadata: Metadata = {
   },
   description:
     "Middleware SaaS multitenant que sincroniza tu ERP con WooCommerce, Tienda Nube, Mercado Libre y tu propio storefront.",
-  generator: "v0.app",
 }
 
 export const viewport = {

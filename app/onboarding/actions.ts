@@ -84,7 +84,7 @@ export async function createTenantAction(
     if (rpcErr?.code === "42501") {
       return { ok: false, error: "Tu sesión expiró. Iniciá sesión nuevamente." }
     }
-    console.log("[v0] create_tenant_with_owner error:", rpcErr)
+    console.log("[sc] create_tenant_with_owner error:", rpcErr)
     return { ok: false, error: rpcErr?.message ?? "No pudimos crear el espacio" }
   }
 

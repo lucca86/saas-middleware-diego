@@ -105,7 +105,7 @@ export async function pushProductToWoo(
         payload: wcPayload,
       })
     } catch (err) {
-      console.error("[v0] pushProductToWoo error:", mapping.channel_id, err)
+      console.error("[sc] pushProductToWoo error:", mapping.channel_id, err)
       void writeSyncLogPush({
         tenantId,
         channelId: mapping.channel_id as string,
@@ -183,7 +183,7 @@ export async function pushVariantToWoo(
         payload: { ...varPayload, stock: payload.stock },
       })
     } catch (err) {
-      console.error("[v0] pushVariantToWoo error:", mapping.channel_id, variantId, err)
+      console.error("[sc] pushVariantToWoo error:", mapping.channel_id, variantId, err)
       void writeSyncLogPush({
         tenantId,
         channelId: mapping.channel_id as string,

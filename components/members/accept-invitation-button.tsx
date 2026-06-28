@@ -19,7 +19,7 @@ export function AcceptInvitationButton({ token }: { token: string }) {
 
       if (error) {
         toast.error("No pudimos aceptar la invitación")
-        console.log("[v0] accept_invitation error:", error)
+        console.log("[sc] accept_invitation error:", error)
         return
       }
 

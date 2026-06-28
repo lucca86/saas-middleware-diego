@@ -5,19 +5,15 @@ import { cookies } from "next/headers"
  * Cookie options forced on every Supabase auth cookie we persist.
  *
  * Why `sameSite=none` + `secure=true`?
- * The v0 preview embeds the running app inside an iframe served from a
- * different eTLD+1 (vusercontent.net) than v0.app. In that "third-party
- * context", browsers refuse to attach cookies marked `SameSite=Lax`
- * (Supabase's default) on subsequent navigations, so the user logs in
- * successfully on the server but the browser drops the cookies and
- * every link click bounces back to /auth/login.
+ * Algunos entornos embeben la app dentro de un iframe desde un dominio
+ * distinto. En ese contexto, los browsers rechazan cookies `SameSite=Lax`
+ * (el default de Supabase) en navegaciones subsiguientes.
  *
- * `SameSite=None; Secure` is the only combination that survives a
- * third-party iframe. It also works correctly in the production
- * deployment (HTTPS top-level), so we apply it unconditionally.
+ * `SameSite=None; Secure` es la única combinación que funciona en ese
+ * escenario y también en producción (HTTPS top-level).
  *
- * CSRF: Next.js Server Actions ship with built-in origin checks; we
- * don't expose unauthenticated POST endpoints that mutate state.
+ * CSRF: Next.js Server Actions incluyen origin checks built-in; no
+ * exponemos endpoints POST sin autenticación que muten estado.
  */
 const COOKIE_OVERRIDES = {
   sameSite: "none",
