@@ -154,9 +154,40 @@ export async function createTestUser(input: {
   return { ok: true, userId, email }
 }
 
+const SUSPENDED_BAN_DURATION = "876000h" // ~100 years; "none" lifts the ban
+
+async function countPlatformAdmins(supabase: ReturnType<typeof createServiceClient>) {
+  const { count } = await supabase
+    .from("platform_admins")
+    .select("user_id", { count: "exact", head: true })
+  return count ?? 0
+}
+
+/** True when `userId` is the only owner of `tenantId`. */
+async function isLastOwner(
+  supabase: ReturnType<typeof createServiceClient>,
+  userId: string,
+  tenantId: string,
+) {
+  const { data } = await supabase
+    .from("tenant_members")
+    .select("user_id")
+    .eq("tenant_id", tenantId)
+    .eq("role", "owner")
+  const owners = data ?? []
+  return owners.length === 1 && owners[0].user_id === userId
+}
+
 export async function togglePlatformAdmin(userId: string, makeAdmin: boolean): Promise<Result> {
-  await requirePlatformAdmin()
+  const me = await requirePlatformAdmin()
   const supabase = createServiceClient()
+
+  if (!makeAdmin) {
+    if (me.id === userId) return { ok: false, error: "No podés quitarte tu propio acceso de plataforma" }
+    if ((await countPlatformAdmins(supabase)) <= 1) {
+      return { ok: false, error: "Debe existir al menos un platform admin" }
+    }
+  }
 
   if (makeAdmin) {
     const { error } = await supabase
@@ -175,6 +206,9 @@ export async function togglePlatformAdmin(userId: string, makeAdmin: boolean): P
 export async function removeTenantMembership(userId: string, tenantId: string): Promise<Result> {
   await requirePlatformAdmin()
   const supabase = createServiceClient()
+  if (await isLastOwner(supabase, userId, tenantId)) {
+    return { ok: false, error: "Es el único owner del tenant. Asigná otro owner antes de quitarlo." }
+  }
   const { error } = await supabase
     .from("tenant_members")
     .delete()
@@ -205,11 +239,127 @@ export async function addTenantMembership(input: {
   return { ok: true }
 }
 
-export async function deleteUser(userId: string): Promise<Result> {
+export async function updateMembershipRole(input: {
+  userId: string
+  tenantId: string
+  role: TenantRoleName
+}): Promise<Result> {
   await requirePlatformAdmin()
+  if (!TENANT_ROLES.includes(input.role)) return { ok: false, error: "Rol inválido" }
   const supabase = createServiceClient()
+
+  if (input.role !== "owner" && (await isLastOwner(supabase, input.userId, input.tenantId))) {
+    return { ok: false, error: "Es el único owner del tenant. Asigná otro owner antes de cambiar su rol." }
+  }
+
+  const { error } = await supabase
+    .from("tenant_members")
+    .update({ role: input.role })
+    .eq("user_id", input.userId)
+    .eq("tenant_id", input.tenantId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath("/admin/users")
+  revalidatePath("/admin/tenants")
+  return { ok: true }
+}
+
+/** Suspends (blocks sign-in, keeps all data) or reactivates a user. */
+export async function setUserSuspended(userId: string, suspended: boolean): Promise<Result> {
+  const me = await requirePlatformAdmin()
+  if (suspended && me.id === userId) return { ok: false, error: "No podés suspender tu propia cuenta" }
+
+  const supabase = createServiceClient()
+  if (suspended) {
+    const { data: isAdmin } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle()
+    if (isAdmin && (await countPlatformAdmins(supabase)) <= 1) {
+      return { ok: false, error: "Debe existir al menos un platform admin activo" }
+    }
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: suspended ? SUSPENDED_BAN_DURATION : "none",
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath("/admin/users")
+  return { ok: true }
+}
+
+/** Changes a user's email and/or sets a new password. Email is auto-confirmed. */
+export async function updateUserCredentials(input: {
+  userId: string
+  email?: string
+  password?: string
+}): Promise<Result> {
+  await requirePlatformAdmin()
+
+  const email = input.email?.trim().toLowerCase()
+  const password = input.password
+  if (!email && !password) return { ok: false, error: "No hay cambios para guardar" }
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Email inválido" }
+  if (password && password.length < 8) {
+    return { ok: false, error: "La contraseña debe tener al menos 8 caracteres" }
+  }
+
+  const supabase = createServiceClient()
+  const { error } = await supabase.auth.admin.updateUserById(input.userId, {
+    ...(email ? { email, email_confirm: true } : {}),
+    ...(password ? { password } : {}),
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath("/admin/users")
+  return { ok: true }
+}
+
+export async function deleteUser(userId: string): Promise<Result> {
+  const me = await requirePlatformAdmin()
+  if (me.id === userId) return { ok: false, error: "No podés eliminar tu propia cuenta" }
+
+  const supabase = createServiceClient()
+
+  const { data: isAdmin } = await supabase
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle()
+  if (isAdmin && (await countPlatformAdmins(supabase)) <= 1) {
+    return { ok: false, error: "Debe existir al menos un platform admin" }
+  }
+
+  const { data: ownerships } = await supabase
+    .from("tenant_members")
+    .select("tenant_id, tenants(name)")
+    .eq("user_id", userId)
+    .eq("role", "owner")
+  for (const o of ownerships ?? []) {
+    if (await isLastOwner(supabase, userId, o.tenant_id)) {
+      const tenant = o.tenants as unknown as { name: string } | null
+      return {
+        ok: false,
+        error: `Es el único owner de "${tenant?.name ?? o.tenant_id}". Reasigná el owner o eliminá el tenant primero.`,
+      }
+    }
+  }
+
+  // Authorship columns have FKs to auth.users without ON DELETE; detach them
+  // so the delete doesn't fail and historical records are preserved.
+  await Promise.all([
+    supabase.from("products").update({ created_by: null }).eq("created_by", userId),
+    supabase.from("sales_channels").update({ created_by: null }).eq("created_by", userId),
+    supabase.from("stock_movements").update({ created_by: null }).eq("created_by", userId),
+    supabase.from("tenants").update({ created_by: null }).eq("created_by", userId),
+  ])
+  await supabase.from("tenant_invitations").delete().eq("invited_by", userId)
+  await supabase.from("tenant_members").delete().eq("user_id", userId)
+  await supabase.from("platform_admins").delete().eq("user_id", userId)
+  await supabase.from("profiles").delete().eq("id", userId)
+
   const { error } = await supabase.auth.admin.deleteUser(userId)
   if (error) return { ok: false, error: error.message }
   revalidatePath("/admin/users")
+  revalidatePath("/admin/tenants")
   return { ok: true }
 }

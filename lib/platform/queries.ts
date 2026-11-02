@@ -17,6 +17,7 @@ export type PlatformUser = {
   created_at: string
   last_sign_in_at: string | null
   is_platform_admin: boolean
+  is_suspended: boolean
   memberships: Array<{ tenant_id: string; tenant_slug: string; tenant_name: string; role: string }>
 }
 
@@ -83,6 +84,7 @@ export async function listAllUsers(): Promise<PlatformUser[]> {
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
       is_platform_admin: adminSet.has(u.id),
+      is_suspended: !!u.banned_until && new Date(u.banned_until).getTime() > Date.now(),
       memberships: membershipsByUser.get(u.id) ?? [],
     }))
     .sort((a, b) => (a.email ?? "").localeCompare(b.email ?? ""))
